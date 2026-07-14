@@ -58,8 +58,6 @@ spring:
       path: /h2-console
       settings:
         web-allow-others: true
-        trace: false
-        web-admin-password:
 
   # 数据初始化
   #sql:
