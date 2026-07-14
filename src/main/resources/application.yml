@@ -1,0 +1,122 @@
+# 服务器配置
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+  
+  # Tomcat配置
+  tomcat:
+    max-threads: 200
+    min-spare-threads: 10
+    connection-timeout: 30000
+    max-connections: 10000
+    accept-count: 100
+
+# Spring配置
+spring:
+  application:
+    name: smart-parking-backend
+  
+  # 开发环境：使用H2文件数据库（数据持久化，重启不丢失）
+  datasource:
+    url: jdbc:h2:file:./data/smart_parking;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+    hikari:
+      connection-timeout: 30000
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      max-lifetime: 1800000
+
+  # JPA配置
+  jpa:
+    hibernate:
+      ddl-auto: update  # 自动创建/更新表结构
+    show-sql: true      # 显示SQL语句
+    properties:
+      hibernate:
+        format_sql: true                    # 格式化SQL
+        dialect: org.hibernate.dialect.H2Dialect
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+        query:
+          in_clause_parameter_padding: true
+    open-in-view: false
+
+  # H2控制台配置
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+        trace: false
+        web-admin-password:
+
+  # 数据初始化
+  #sql:
+  #  init:
+  #    mode: always      # 总是初始化数据
+  #    schema-locations: classpath:schema.sql
+  #    data-locations: classpath:data.sql
+
+  # Jackson JSON配置
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+  # MVC配置
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+    static-path-pattern: /static/**
+
+# 日志配置
+logging:
+  level:
+    com.smartparking: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{36} - %msg%n"
+  file:
+    name: logs/smart-parking.log
+    max-size: 10MB
+    max-history: 30
+
+# 自定义配置
+smart-parking:
+  fee:
+    hourly-rate: 5.00  # 每小时费用
+    free-minutes: 30   # 免费停车分钟数
+    daily-max: 50.00   # 每日最高费用
+  
+  parking:
+    total-spots: 200   # 总车位数
+    floors:
+      - name: "B1"
+        spots: 100
+      - name: "B2"
+        spots: 100
+
+# 跨域配置（开发环境）
+cors:
+  allowed-origins: http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000
+  allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+  allowed-headers: "*"
+  allow-credentials: true
+  max-age: 3600
