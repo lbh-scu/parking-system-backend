@@ -74,4 +74,15 @@ public class ExcelUtil {
         @Override
         public void doAfterAllAnalysed(AnalysisContext context) {}
     }
+
+    /**
+     * 输入流读取Excel（给启动自动导入使用）
+     */
+    public static <T> List<T> importExcelByStream(InputStream inputStream, Class<T> clazz) {
+        List<T> dataList = new ArrayList<>();
+        EasyExcel.read(inputStream, clazz, new GenericExcelListener<>(dataList))
+                .sheet()
+                .doRead();
+        return dataList;
+    }
 }
