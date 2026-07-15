@@ -1,6 +1,47 @@
 target/
-data/
-logs/
+*.class
+*.jar
+*.war
+*.nar
+*.ear
 *.log
+*.gz
+*.zip
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+!/.mvn/wrapper/maven-wrapper.jar
+
+# IDE
 .idea/
 *.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# H2 Database
+data/
+!data/.gitkeep
+
+# Logs
+logs/
+*.log
+
+# Env
+.env
+.env.local

@@ -2,17 +2,17 @@ package com.smartparking.controller;
 
 import com.smartparking.common.ApiResponse;
 import com.smartparking.entity.Fee;
-import com.smartparking.repository.FeeRepository;
-import com.smartparking.service.ExcelCommonService;
 import com.smartparking.service.FeeService;
-import com.smartparking.util.ExcelUtil;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -21,12 +21,6 @@ public class FeeController {
 
     @Autowired
     private FeeService feeService;
-
-    @Autowired
-    private ExcelCommonService excelCommonService;
-
-    @Autowired
-    private FeeRepository feeRepository;
 
     /**
      * 计算停车费用
@@ -71,41 +65,59 @@ public class FeeController {
         BigDecimal totalRevenue = feeService.getTotalRevenue();
         return ApiResponse.success(totalRevenue);
     }
-    /**
-     * 下载费用账单Excel导入模板
-     */
-    @GetMapping("/template")
-    public ResponseEntity<byte[]> downloadTemplate() throws Exception {
-        String templatePath = "excel-template/fee_template.xlsx";
-        byte[] bytes = ExcelUtil.getTemplateFile(templatePath);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment;filename=费用账单导入模板.xlsx")
-                .header(HttpHeaders.CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                .body(bytes);
-    }
 
     /**
-     * 批量导入账单Excel
-     */
-    @PostMapping("/import")
-    public ApiResponse<String> importExcel(@RequestParam MultipartFile file) {
-        try {
-            int count = excelCommonService.importData(file, Fee.class, feeRepository);
-            return ApiResponse.success("账单导入成功，共" + count + "条数据", null);
-        } catch (Exception e) {
-            return ApiResponse.error(400, e.getMessage());
-        }
-    }
-
-    /**
-     * 导出全部账单数据Excel（浏览器下载）
+     * 导出费用记录为 Excel（全部记录，不分页）
      */
     @GetMapping("/export")
-    public ResponseEntity<byte[]> exportExcel() throws Exception {
-        byte[] bytes = excelCommonService.exportAllData(feeRepository, Fee.class);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment;filename=费用账单数据导出.xlsx")
-                .header(HttpHeaders.CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                .body(bytes);
+    public void exportExcel(HttpServletResponse response) throws IOException {
+        List<Fee> fees = feeService.getPendingFees();
+
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("费用记录");
+
+        // 表头
+        String[] headers = {"ID", "车牌号", "入场时间", "出场时间", "停车时长(小时)", "费率(元/小时)", "总费用(元)", "状态", "支付时间", "创建时间"};
+        Row headerRow = sheet.createRow(0);
+        CellStyle headerStyle = workbook.createCellStyle();
+        headerStyle.setFillForegroundColor(IndexedColors.LIGHT_BLUE.getIndex());
+        headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        Font font = workbook.createFont();
+        font.setBold(true);
+        headerStyle.setFont(font);
+
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(headerStyle);
+        }
+
+        // 数据
+        for (int i = 0; i < fees.size(); i++) {
+            Row row = sheet.createRow(i + 1);
+            Fee f = fees.get(i);
+            row.createCell(0).setCellValue(f.getId() != null ? f.getId().toString() : "");
+            row.createCell(1).setCellValue(f.getPlateNumber() != null ? f.getPlateNumber() : "");
+            row.createCell(2).setCellValue(f.getEntryTime() != null ? f.getEntryTime().toString() : "");
+            row.createCell(3).setCellValue(f.getExitTime() != null ? f.getExitTime().toString() : "");
+            row.createCell(4).setCellValue(f.getParkingHours() != null ? f.getParkingHours().toString() : "");
+            row.createCell(5).setCellValue(f.getHourlyRate() != null ? f.getHourlyRate().toString() : "");
+            row.createCell(6).setCellValue(f.getTotalAmount() != null ? f.getTotalAmount().toString() : "");
+            row.createCell(7).setCellValue(f.getStatus() != null ? f.getStatus() : "");
+            row.createCell(8).setCellValue(f.getPaymentTime() != null ? f.getPaymentTime().toString() : "");
+            row.createCell(9).setCellValue(f.getCreatedAt() != null ? f.getCreatedAt().toString() : "");
+        }
+
+        // 自适应列宽
+        for (int i = 0; i < headers.length; i++) {
+            sheet.autoSizeColumn(i);
+        }
+
+        // 写入响应
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition",
+                "attachment; filename=" + URLEncoder.encode("费用记录.xlsx", StandardCharsets.UTF_8));
+        workbook.write(response.getOutputStream());
+        workbook.close();
     }
 }

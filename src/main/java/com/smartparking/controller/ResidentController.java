@@ -1,60 +1,82 @@
 package com.smartparking.controller;
 
 import com.smartparking.common.ApiResponse;
-import com.smartparking.entity.Resident;
-import com.smartparking.repository.ResidentRepository;
-import com.smartparking.service.ExcelCommonService;
-import com.smartparking.service.ResidentService;
-import com.smartparking.util.ExcelUtil;
+import com.smartparking.entity.Vehicle;
+import com.smartparking.repository.VehicleRepository;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
+
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @RestController
 @RequestMapping("/residents")
 public class ResidentController {
+
     @Autowired
-    private ExcelCommonService excelCommonService;
-    @Autowired
-    private ResidentRepository residentRepository;
+    private VehicleRepository vehicleRepository;
 
     /**
-     * 1. 下载内置业主Excel模板（浏览器自动弹出下载栏）
+     * 获取所有住户（isResident = true）
      */
-    @GetMapping("/template")
-    public ResponseEntity<byte[]> downloadTemplate() throws Exception {
-        String templatePath = "excel-template/resident_template.xlsx";
-        byte[] bytes = ExcelUtil.getTemplateFile(templatePath);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment;filename=业主导入模板.xlsx")
-                .header(HttpHeaders.CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                .body(bytes);
+    @GetMapping
+    public ApiResponse<List<Vehicle>> getResidents() {
+        List<Vehicle> residents = vehicleRepository.findByIsResident(true);
+        return ApiResponse.success(residents);
     }
 
     /**
-     * 2. 上传Excel批量导入业主（支持ID列）
-     */
-    @PostMapping("/import")
-    public ApiResponse<String> importExcel(@RequestParam MultipartFile file) {
-        try {
-            int count = excelCommonService.importData(file, Resident.class, residentRepository);
-            return ApiResponse.success("导入成功，共" + count + "条数据", null);
-        } catch (Exception e) {
-            return ApiResponse.error(400, e.getMessage());
-        }
-    }
-
-    /**
-     * 3. 导出全部业主数据，浏览器下载Excel
+     * 导出住户数据为 Excel（含所有住户，不分页）
      */
     @GetMapping("/export")
-    public ResponseEntity<byte[]> exportExcel() throws Exception {
-        byte[] bytes = excelCommonService.exportAllData(residentRepository, Resident.class);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment;filename=业主数据导出.xlsx")
-                .header(HttpHeaders.CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                .body(bytes);
+    public void exportExcel(HttpServletResponse response) throws IOException {
+        List<Vehicle> residents = vehicleRepository.findByIsResident(true);
+
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("住户信息");
+
+        // 表头
+        String[] headers = {"住户ID", "车牌号", "入场时间", "状态", "创建时间"};
+        Row headerRow = sheet.createRow(0);
+        CellStyle headerStyle = workbook.createCellStyle();
+        headerStyle.setFillForegroundColor(IndexedColors.LIGHT_BLUE.getIndex());
+        headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        Font font = workbook.createFont();
+        font.setBold(true);
+        headerStyle.setFont(font);
+
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(headerStyle);
+        }
+
+        // 数据
+        for (int i = 0; i < residents.size(); i++) {
+            Row row = sheet.createRow(i + 1);
+            Vehicle v = residents.get(i);
+            row.createCell(0).setCellValue(v.getId() != null ? v.getId().toString() : "");
+            row.createCell(1).setCellValue(v.getPlateNumber() != null ? v.getPlateNumber() : "");
+            row.createCell(2).setCellValue(v.getEntryTime() != null ? v.getEntryTime().toString() : "");
+            row.createCell(3).setCellValue(v.getStatus() != null ? v.getStatus() : "");
+            row.createCell(4).setCellValue(v.getCreatedAt() != null ? v.getCreatedAt().toString() : "");
+        }
+
+        // 自适应列宽
+        for (int i = 0; i < headers.length; i++) {
+            sheet.autoSizeColumn(i);
+        }
+
+        // 写入响应
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setHeader("Content-Disposition",
+                "attachment; filename=" + URLEncoder.encode("住户信息.xlsx", StandardCharsets.UTF_8));
+        workbook.write(response.getOutputStream());
+        workbook.close();
     }
 }
