@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
+public interface VehicleRepository extends  BaseRepository<Vehicle, Long> {
 
     // 根据车牌号查找车辆
     Optional<Vehicle> findByPlateNumber(String plateNumber);

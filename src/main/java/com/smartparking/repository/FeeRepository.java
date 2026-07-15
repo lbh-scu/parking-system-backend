@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface FeeRepository extends JpaRepository<Fee, Long> {
+public interface FeeRepository extends  BaseRepository<Fee, Long> {
 
     // 根据状态查找费用记录
     List<Fee> findByStatus(String status);
