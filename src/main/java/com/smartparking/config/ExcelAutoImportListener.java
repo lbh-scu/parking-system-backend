@@ -37,7 +37,6 @@ public class ExcelAutoImportListener {
     @Resource
     private InitDataProperties initDataProperties;
 
-    // 内部类改为public static消除可见性警告
     public static final class TableImportMeta<T, ID> {
         String templatePath;
         Class<T> entityCls;
@@ -54,7 +53,6 @@ public class ExcelAutoImportListener {
     @Transactional
     public void autoImportExcelOnStart() {
         boolean forceRefresh = initDataProperties.isForceRefresh();
-        // 路径空格删掉："excel-template / 用户信息.xlsx" → "excel-template/用户信息.xlsx"
         List<TableImportMeta<?, ?>> importList = List.of(
                 new TableImportMeta<>("excel-template/用户信息.xlsx", Resident.class, residentRepository),
                 new TableImportMeta<>("excel-template/车辆记录.xlsx", Vehicle.class, vehicleRepository),
@@ -68,18 +66,11 @@ public class ExcelAutoImportListener {
 
             ClassPathResource resource = new ClassPathResource(filePath);
             if (!resource.exists()) {
-                // 修复：% s → %s，% n → %n
                 System.out.printf("[DEBUG 自动导入] 文件【%s】不存在，跳过该表导入%n", filePath);
                 continue;
             }
 
             try (InputStream inputStream = resource.getInputStream()) {
-//                if (forceRefresh) {
-//                    System.out.printf("[强制重置] 清空表%s，开始导入模板%n", meta.entityCls.getSimpleName());
-//                    repo.deleteAll();
-//                    doImport(meta, inputStream);
-//                    continue;
-//                }
                 if (forceRefresh) {
                     System.out.printf("[强制重置] 清空表%s，重置自增主键，开始导入模板%n", meta.entityCls.getSimpleName());
 

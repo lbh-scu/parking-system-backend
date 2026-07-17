@@ -1,5 +1,6 @@
 package com.smartparking.service;
 
+import com.smartparking.common.ApiResponse;
 import com.smartparking.dto.ResidentDTO;
 import com.smartparking.entity.Resident;
 import com.smartparking.repository.ResidentRepository;
@@ -11,21 +12,22 @@ public class ResidentService {
     @Autowired
     private ResidentRepository residentRepository;
 
-    public void addResident(ResidentDTO dto) {
+    public ApiResponse<Void> addResident(ResidentDTO dto) {
+        // 姓名非空校验
         if (dto.getUserName() == null || dto.getUserName().isBlank()) {
-            throw new RuntimeException("住户姓名不能为空");
+            return ApiResponse.error("住户姓名不能为空");
         }
-        // 校验车牌号是否已存在
+        // 车牌重复校验
         boolean exist = residentRepository.existsByPlateNumber(dto.getPlateNumber());
         if(exist){
-            throw new RuntimeException("该车牌号已存在");
+            return ApiResponse.error("车牌号重复！");
         }
-        // 组装实体，id留空，数据库自增
+        // 组装保存
         Resident resident = new Resident();
         resident.setUserName(dto.getUserName());
         resident.setPlateNumber(dto.getPlateNumber());
-        // 保存
         residentRepository.save(resident);
+        // 成功返回
+        return ApiResponse.success();
     }
-
 }

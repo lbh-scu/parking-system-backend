@@ -41,8 +41,7 @@ public class ResidentController {
 
     @PostMapping("/resident/add")
     public ApiResponse<Void> addResident(@RequestBody ResidentDTO dto) {
-        residentService.addResident(dto);
-        return ApiResponse.success();
+        return residentService.addResident(dto);
     }
 
     /**
