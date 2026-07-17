@@ -11,6 +11,9 @@ public interface VehicleRepository extends BaseRepository<Vehicle, Long> {
     // 根据车牌号查找车辆（可能有多次出入记录）
     List<Vehicle> findByPlateNumber(String plateNumber);
 
+    // 按车牌号模糊搜索（用于历史记录筛选）
+    List<Vehicle> findByPlateNumberContaining(String plateNumber);
+
     // 查找在场车辆
     List<Vehicle> findByStatus(String status);
 
