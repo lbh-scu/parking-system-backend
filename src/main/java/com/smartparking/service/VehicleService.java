@@ -1,9 +1,12 @@
 package com.smartparking.service;
 
+import com.smartparking.entity.ParkingSpot;
 import com.smartparking.entity.Vehicle;
+import com.smartparking.repository.ParkingSpotRepository;
 import com.smartparking.repository.VehicleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -14,9 +17,13 @@ public class VehicleService {
     @Autowired
     private VehicleRepository vehicleRepository;
 
+    @Autowired
+    private ParkingSpotRepository parkingSpotRepository;
+
     /**
      * 车辆入场
      */
+    @Transactional
     public Vehicle vehicleEntry(String plateNumber, String spotNumber) {
         // 检查是否已有未出场的同一辆车
         Optional<Vehicle> existing = vehicleRepository.findByPlateNumberAndStatus(plateNumber, "PARKING");
@@ -24,28 +31,53 @@ public class VehicleService {
             throw new RuntimeException("该车辆已在停车场内");
         }
 
+        // 检查车位是否可用
+        ParkingSpot spot = parkingSpotRepository.findBySpotNumber(spotNumber)
+                .orElseThrow(() -> new RuntimeException("车位不存在: " + spotNumber));
+        if (!"FREE".equals(spot.getStatus())) {
+            throw new RuntimeException("车位 " + spotNumber + " 已被占用");
+        }
+
         Vehicle vehicle = new Vehicle();
         vehicle.setPlateNumber(plateNumber);
         vehicle.setSpotNumber(spotNumber);
+        vehicle.setSpotId(spot.getId());
         vehicle.setStatus("PARKING");
         vehicle.setEntryTime(LocalDateTime.now());
-        // isResident 后续由 1.2 任务接入 ResidentService 动态判断
         vehicle.setIsResident(false);
+        vehicleRepository.save(vehicle);
 
-        return vehicleRepository.save(vehicle);
+        // 更新车位状态
+        spot.setStatus("OCCUPIED");
+        spot.setCurrentPlate(plateNumber);
+        parkingSpotRepository.save(spot);
+
+        return vehicle;
     }
 
     /**
      * 车辆出场
      */
+    @Transactional
     public Vehicle vehicleExit(String plateNumber) {
         Vehicle vehicle = vehicleRepository.findByPlateNumberAndStatus(plateNumber, "PARKING")
                 .orElseThrow(() -> new RuntimeException("未找到该车辆的入场记录"));
 
         vehicle.setExitTime(LocalDateTime.now());
         vehicle.setStatus("EXITED");
+        vehicleRepository.save(vehicle);
 
-        return vehicleRepository.save(vehicle);
+        // 释放车位
+        if (vehicle.getSpotNumber() != null) {
+            parkingSpotRepository.findBySpotNumber(vehicle.getSpotNumber())
+                    .ifPresent(spot -> {
+                        spot.setStatus("FREE");
+                        spot.setCurrentPlate(null);
+                        parkingSpotRepository.save(spot);
+                    });
+        }
+
+        return vehicle;
     }
 
     /**
