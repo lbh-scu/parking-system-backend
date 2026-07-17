@@ -1,3 +1,8 @@
+# 数据初始化开关
+init:
+  # false=仅空表自动导入；true=启动清空所有表，强制重新导入Excel
+  force-refresh: true
+
 # 服务器配置
 server:
   port: 8080

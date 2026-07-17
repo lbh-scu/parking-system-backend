@@ -1,5 +1,6 @@
 package com.smartparking.entity;
 
+import com.alibaba.excel.annotation.ExcelIgnore;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -16,6 +17,7 @@ public class Fee {
 
     // 账单主键
     @Id
+    @ExcelIgnore
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 

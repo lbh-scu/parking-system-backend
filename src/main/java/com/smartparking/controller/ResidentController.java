@@ -1,14 +1,17 @@
 package com.smartparking.controller;
 
 import com.smartparking.common.ApiResponse;
-import com.smartparking.entity.Vehicle;
-import com.smartparking.repository.VehicleRepository;
+import com.smartparking.entity.Resident;
+import com.smartparking.repository.ResidentRepository;
+import com.smartparking.service.ExcelCommonService;
+import com.smartparking.service.ResidentService;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.web.multipart.MultipartFile;
+
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -19,14 +22,20 @@ import java.util.List;
 public class ResidentController {
 
     @Autowired
-    private VehicleRepository vehicleRepository;
+    private ResidentService residentService;
+
+    @Autowired
+    private ResidentRepository residentRepository;
+
+    @Autowired
+    private ExcelCommonService  excelCommonService;
 
     /**
-     * 获取所有住户（isResident = true）
+     * 获取所有住户
      */
     @GetMapping
-    public ApiResponse<List<Vehicle>> getResidents() {
-        List<Vehicle> residents = vehicleRepository.findByIsResident(true);
+    public ApiResponse<List<Resident>> getResidents() {
+        List<Resident> residents = residentRepository.findAll();
         return ApiResponse.success(residents);
     }
 
@@ -35,20 +44,15 @@ public class ResidentController {
      */
     @GetMapping("/export")
     public void exportExcel(HttpServletResponse response) throws IOException {
-        List<Vehicle> residents = vehicleRepository.findByIsResident(true);
+        List<Resident> residents = residentRepository.findAll();
 
         Workbook workbook = new XSSFWorkbook();
         Sheet sheet = workbook.createSheet("住户信息");
 
         // 表头
-        String[] headers = {"住户ID", "车牌号", "入场时间", "状态", "创建时间"};
+        String[] headers = {"ID", "用户名", "车牌号"};
         Row headerRow = sheet.createRow(0);
-        CellStyle headerStyle = workbook.createCellStyle();
-        headerStyle.setFillForegroundColor(IndexedColors.LIGHT_BLUE.getIndex());
-        headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        Font font = workbook.createFont();
-        font.setBold(true);
-        headerStyle.setFont(font);
+        CellStyle headerStyle = createHeaderStyle(workbook);
 
         for (int i = 0; i < headers.length; i++) {
             Cell cell = headerRow.createCell(i);
@@ -56,27 +60,49 @@ public class ResidentController {
             cell.setCellStyle(headerStyle);
         }
 
-        // 数据
+        // 数据填充
         for (int i = 0; i < residents.size(); i++) {
             Row row = sheet.createRow(i + 1);
-            Vehicle v = residents.get(i);
-            row.createCell(0).setCellValue(v.getId() != null ? v.getId().toString() : "");
-            row.createCell(1).setCellValue(v.getPlateNumber() != null ? v.getPlateNumber() : "");
-            row.createCell(2).setCellValue(v.getEntryTime() != null ? v.getEntryTime().toString() : "");
-            row.createCell(3).setCellValue(v.getStatus() != null ? v.getStatus() : "");
-            row.createCell(4).setCellValue(v.getCreatedAt() != null ? v.getCreatedAt().toString() : "");
+            var r = residents.get(i);
+
+            row.createCell(0).setCellValue(r.getId() != null ? r.getId().toString() : "");
+            row.createCell(1).setCellValue(r.getUserName() != null ? r.getUserName() : "");
+            row.createCell(2).setCellValue(r.getPlateNumber() != null ? r.getPlateNumber() : "");
         }
 
-        // 自适应列宽
+        // 设置列宽为 10
         for (int i = 0; i < headers.length; i++) {
-            sheet.autoSizeColumn(i);
+            sheet.setColumnWidth(i, 10 * 256);
         }
 
-        // 写入响应
+        // 设置响应头
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setHeader("Content-Disposition",
-                "attachment; filename=" + URLEncoder.encode("住户信息.xlsx", StandardCharsets.UTF_8));
+                "attachment; filename=" + URLEncoder.encode("用户信息.xlsx", StandardCharsets.UTF_8)
+                        .replaceAll("\\+", "%20"));
+
         workbook.write(response.getOutputStream());
-        workbook.close();
+        response.getOutputStream().flush();
+    }
+
+    /**
+     * 创建表头样式
+     */
+    private CellStyle createHeaderStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        style.setFillForegroundColor(IndexedColors.LIGHT_BLUE.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+
+        Font font = workbook.createFont();
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 12);
+        style.setFont(font);
+
+        return style;
     }
 }

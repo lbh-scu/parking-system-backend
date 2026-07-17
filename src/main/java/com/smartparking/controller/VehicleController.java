@@ -2,6 +2,7 @@ package com.smartparking.controller;
 
 import com.smartparking.common.ApiResponse;
 import com.smartparking.entity.Vehicle;
+import com.smartparking.repository.VehicleRepository;
 import com.smartparking.service.VehicleService;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -20,6 +21,9 @@ public class VehicleController {
 
     @Autowired
     private VehicleService vehicleService;
+
+    @Autowired
+    private VehicleRepository vehicleRepository;
 
     /**
      * 车辆入场
@@ -73,20 +77,15 @@ public class VehicleController {
      */
     @GetMapping("/export")
     public void exportExcel(HttpServletResponse response) throws IOException {
-        List<Vehicle> vehicles = vehicleService.getVehicleHistory(null);
+        List<Vehicle> vehicles = vehicleRepository.findAll();
 
         Workbook workbook = new XSSFWorkbook();
         Sheet sheet = workbook.createSheet("车辆记录");
 
         // 表头
-        String[] headers = {"ID", "车牌号", "车位号", "入场时间", "出场时间", "状态", "创建时间"};
+        String[] headers = {"ID", "车牌号", "车位号", "入场时间", "出场时间", "是否为居民", "状态", "创建时间", "更新时间"};
         Row headerRow = sheet.createRow(0);
-        CellStyle headerStyle = workbook.createCellStyle();
-        headerStyle.setFillForegroundColor(IndexedColors.LIGHT_BLUE.getIndex());
-        headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        Font font = workbook.createFont();
-        font.setBold(true);
-        headerStyle.setFont(font);
+        CellStyle headerStyle = createHeaderStyle(workbook);
 
         for (int i = 0; i < headers.length; i++) {
             Cell cell = headerRow.createCell(i);
@@ -94,29 +93,56 @@ public class VehicleController {
             cell.setCellStyle(headerStyle);
         }
 
-        // 数据
+        // 数据填充
         for (int i = 0; i < vehicles.size(); i++) {
             Row row = sheet.createRow(i + 1);
             Vehicle v = vehicles.get(i);
+
             row.createCell(0).setCellValue(v.getId() != null ? v.getId().toString() : "");
             row.createCell(1).setCellValue(v.getPlateNumber() != null ? v.getPlateNumber() : "");
             row.createCell(2).setCellValue(v.getSpotNumber() != null ? v.getSpotNumber() : "");
             row.createCell(3).setCellValue(v.getEntryTime() != null ? v.getEntryTime().toString() : "");
             row.createCell(4).setCellValue(v.getExitTime() != null ? v.getExitTime().toString() : "");
-            row.createCell(5).setCellValue(v.getStatus() != null ? v.getStatus() : "");
-            row.createCell(6).setCellValue(v.getCreatedAt() != null ? v.getCreatedAt().toString() : "");
+            row.createCell(5).setCellValue(v.getIsResident() != null ? v.getIsResident().toString() : "");      // 是否为居民
+            row.createCell(6).setCellValue(v.getStatus() != null ? v.getStatus() : "");
+            row.createCell(7).setCellValue(v.getCreatedAt() != null ? v.getCreatedAt().toString() : "");
+            row.createCell(8).setCellValue(v.getUpdatedAt() != null ? v.getUpdatedAt().toString() : "");
         }
 
-        // 自适应列宽
+        // 设置列宽为 10
         for (int i = 0; i < headers.length; i++) {
-            sheet.autoSizeColumn(i);
+            sheet.setColumnWidth(i, 10 * 256);
         }
 
-        // 写入响应
+        // 设置响应头
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setHeader("Content-Disposition",
-                "attachment; filename=" + URLEncoder.encode("车辆记录.xlsx", StandardCharsets.UTF_8));
+                "attachment; filename=" + URLEncoder.encode("车辆记录.xlsx", StandardCharsets.UTF_8)
+                        .replaceAll("\\+", "%20"));
+
         workbook.write(response.getOutputStream());
+        response.getOutputStream().flush();
         workbook.close();
+    }
+
+    /**
+     * 创建表头样式
+     */
+    private CellStyle createHeaderStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        style.setFillForegroundColor(IndexedColors.LIGHT_BLUE.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+
+        Font font = workbook.createFont();
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 12);
+        style.setFont(font);
+
+        return style;
     }
 }

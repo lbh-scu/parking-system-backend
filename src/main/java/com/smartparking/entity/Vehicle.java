@@ -1,5 +1,6 @@
 package com.smartparking.entity;
 
+import com.alibaba.excel.annotation.ExcelIgnore;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -9,6 +10,7 @@ import java.util.Objects;
 public class Vehicle {
     // 车辆记录主键
     @Id
+    @ExcelIgnore
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 

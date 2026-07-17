@@ -42,7 +42,7 @@ public class ExcelUtil {
 
     /**
      * 读取resources内置模板文件，返回字节流用于浏览器下载
-     * @param templatePath 相对路径：excel-template/resident_template.xlsx
+     * @param templatePath 相对路径：excel-template/xxx.xlsx
      */
     public static byte[] getTemplateFile(String templatePath) throws IOException {
         try (InputStream inputStream = ExcelUtil.class.getClassLoader().getResourceAsStream(templatePath);

@@ -105,11 +105,12 @@
         <resources>
             <resource>
                 <directory>src/main/resources</directory>
-                <filtering>true</filtering>
+                <filtering>false</filtering>
                 <includes>
                     <include>**/*.yml</include>
                     <include>**/*.yaml</include>
                     <include>**/*.properties</include>
+                    <include>excel-template/**/*.xlsx</include>
                 </includes>
             </resource>
         </resources>
