@@ -1,6 +1,7 @@
 package com.smartparking.controller;
 
 import com.smartparking.common.ApiResponse;
+import com.smartparking.dto.ResidentDTO;
 import com.smartparking.entity.Resident;
 import com.smartparking.repository.ResidentRepository;
 import com.smartparking.service.ExcelCommonService;
@@ -10,7 +11,6 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -37,6 +37,12 @@ public class ResidentController {
     public ApiResponse<List<Resident>> getResidents() {
         List<Resident> residents = residentRepository.findAll();
         return ApiResponse.success(residents);
+    }
+
+    @PostMapping("/resident/add")
+    public ApiResponse<Void> addResident(@RequestBody ResidentDTO dto) {
+        residentService.addResident(dto);
+        return ApiResponse.success();
     }
 
     /**

@@ -33,6 +33,9 @@ public class ApiResponse<T> {
         return new ApiResponse<>(200, message, data);
     }
 
+    // 无参数成功，返回data=null，用于新增/删除无返回数据场景
+    public static <T> ApiResponse<T> success() { return new ApiResponse<>(200, "success", null); }
+
     public static <T> ApiResponse<T> error(Integer code, String message) {
         return new ApiResponse<>(code, message, null);
     }
