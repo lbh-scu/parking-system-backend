@@ -71,7 +71,7 @@ public class ParkingSpotService {
         List<ParkingSpot> allSpots = parkingSpotRepository.findAll();
 
         Map<String, List<ParkingSpot>> grouped = allSpots.stream()
-                .collect(Collectors.groupingBy(ParkingSpot::getArea));
+                .collect(Collectors.groupingBy(ParkingSpot::getArea, LinkedHashMap::new, Collectors.toList()));
 
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map.Entry<String, List<ParkingSpot>> entry : grouped.entrySet()) {
