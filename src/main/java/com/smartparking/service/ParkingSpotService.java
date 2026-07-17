@@ -71,16 +71,14 @@ public class ParkingSpotService {
         List<ParkingSpot> allSpots = parkingSpotRepository.findAll();
 
         Map<String, List<ParkingSpot>> grouped = allSpots.stream()
-                .collect(Collectors.groupingBy(s -> s.getArea() + "|" + s.getFloor()));
+                .collect(Collectors.groupingBy(ParkingSpot::getArea));
 
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map.Entry<String, List<ParkingSpot>> entry : grouped.entrySet()) {
-            String[] keys = entry.getKey().split("\\|");
             List<ParkingSpot> spots = entry.getValue();
             long occupied = spots.stream().filter(s -> "OCCUPIED".equals(s.getStatus())).count();
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("area", keys[0]);
-            item.put("floor", Integer.parseInt(keys[1]));
+            item.put("area", entry.getKey());
             item.put("total", spots.size());
             item.put("occupied", (int) occupied);
             item.put("rate", spots.isEmpty() ? 0 : (double) occupied / spots.size());
