@@ -60,9 +60,7 @@ public class VehicleService {
      */
     public List<Vehicle> getVehicleHistory(String plateNumber) {
         if (plateNumber != null && !plateNumber.isEmpty()) {
-            return vehicleRepository.findByPlateNumber(plateNumber)
-                    .map(List::of)
-                    .orElse(List.of());
+            return vehicleRepository.findByPlateNumber(plateNumber);
         }
         return vehicleRepository.findAll();
     }

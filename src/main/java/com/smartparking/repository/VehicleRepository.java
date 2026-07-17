@@ -8,8 +8,8 @@ import java.util.Optional;
 @Repository
 public interface VehicleRepository extends BaseRepository<Vehicle, Long> {
 
-    // 根据车牌号查找车辆
-    Optional<Vehicle> findByPlateNumber(String plateNumber);
+    // 根据车牌号查找车辆（可能有多次出入记录）
+    List<Vehicle> findByPlateNumber(String plateNumber);
 
     // 查找在场车辆
     List<Vehicle> findByStatus(String status);
