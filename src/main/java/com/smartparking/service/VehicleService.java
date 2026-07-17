@@ -29,31 +29,18 @@ public class VehicleService {
         Optional<Vehicle> existing = vehicleRepository.findByPlateNumberAndStatus(plateNumber, "PARKING");
         if (existing.isPresent()) {
             throw new RuntimeException("该车辆已在停车场内");
-
         }
 
-        ParkingSpot spot;
-        String assignedSpot;
-        if (spotNumber == null || spotNumber.isBlank()) {
-            List<ParkingSpot> freeSpots = parkingSpotRepository.findByStatus("FREE");
-            if (freeSpots.isEmpty()) {
-                throw new RuntimeException("暂无空闲车位");
-            }
-            spot = freeSpots.get(0);
-            assignedSpot = spot.getSpotNumber();
-        } else {
-            String input = spotNumber;
-            spot = parkingSpotRepository.findBySpotNumber(spotNumber)
-                    .orElseThrow(() -> new RuntimeException("车位不存在: " + input));
-            if (!"FREE".equals(spot.getStatus())) {
-                throw new RuntimeException("车位 " + spotNumber + " 已被占用");
-            }
-            assignedSpot = spotNumber;
+        // 检查车位是否可用
+        ParkingSpot spot = parkingSpotRepository.findBySpotNumber(spotNumber)
+                .orElseThrow(() -> new RuntimeException("车位不存在: " + spotNumber));
+        if (!"FREE".equals(spot.getStatus())) {
+            throw new RuntimeException("车位 " + spotNumber + " 已被占用");
         }
 
         Vehicle vehicle = new Vehicle();
         vehicle.setPlateNumber(plateNumber);
-        vehicle.setSpotNumber(assignedSpot);
+        vehicle.setSpotNumber(spotNumber);
         vehicle.setSpotId(spot.getId());
         vehicle.setStatus("PARKING");
         vehicle.setEntryTime(LocalDateTime.now());
