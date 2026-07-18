@@ -1,13 +1,18 @@
 package com.smartparking.service;
 
+import com.smartparking.entity.Fee;
 import com.smartparking.entity.ParkingSpot;
 import com.smartparking.entity.Vehicle;
+import com.smartparking.repository.FeeRepository;
 import com.smartparking.repository.ParkingSpotRepository;
+import com.smartparking.repository.ResidentRepository;
 import com.smartparking.repository.VehicleRepository;
 import com.smartparking.util.LicensePlateUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -21,17 +26,17 @@ public class VehicleService {
     @Autowired
     private ParkingSpotRepository parkingSpotRepository;
 
+    @Autowired
+    private FeeRepository feeRepository;
+
+    @Autowired
+    private ResidentRepository residentRepository;
+    
     /**
      * 车辆入场
      */
     @Transactional
     public Vehicle vehicleEntry(String plateNumber, String spotNumber) {
-        // 校验车牌格式
-        String plateErr = LicensePlateUtil.validate(plateNumber);
-        if (plateErr != null) {
-            throw new RuntimeException(plateErr);
-        }
-
         // 检查是否已有未出场的同一辆车
         Optional<Vehicle> existing = vehicleRepository.findByPlateNumberAndStatus(plateNumber, "PARKING");
         if (existing.isPresent()) {
@@ -62,7 +67,11 @@ public class VehicleService {
         vehicle.setSpotId(spot.getId());
         vehicle.setStatus("PARKING");
         vehicle.setEntryTime(LocalDateTime.now());
-        vehicle.setIsResident(false);
+
+        // 判断车牌是否在住户表，是则标记为小区住户
+        boolean isResidentCar = residentRepository.existsByPlateNumber(plateNumber);
+        vehicle.setIsResident(isResidentCar);
+
         vehicleRepository.save(vehicle);
 
         // 更新车位状态
@@ -81,9 +90,27 @@ public class VehicleService {
         Vehicle vehicle = vehicleRepository.findByPlateNumberAndStatus(plateNumber, "PARKING")
                 .orElseThrow(() -> new RuntimeException("未找到该车辆的入场记录"));
 
-        vehicle.setExitTime(LocalDateTime.now());
+        LocalDateTime exitTime = LocalDateTime.now();
+        vehicle.setExitTime(exitTime);
         vehicle.setStatus("EXITED");
         vehicleRepository.save(vehicle);
+
+        // 自动创建费用记录（PENDING状态，放入待结算）
+        Duration duration = Duration.between(vehicle.getEntryTime(), exitTime);
+        long minutes = duration.toMinutes();
+        double hours = minutes / 60.0;
+        BigDecimal hourlyRate = new BigDecimal("5.00");
+        BigDecimal totalAmount = hourlyRate.multiply(BigDecimal.valueOf(Math.max(1, Math.ceil(hours))));
+
+        Fee fee = new Fee();
+        fee.setPlateNumber(plateNumber);
+        fee.setEntryTime(vehicle.getEntryTime());
+        fee.setExitTime(exitTime);
+        fee.setParkingHours(hours);
+        fee.setHourlyRate(hourlyRate);
+        fee.setTotalAmount(totalAmount);
+        fee.setStatus("PENDING");
+        feeRepository.save(fee);
 
         // 释放车位
         if (vehicle.getSpotNumber() != null) {

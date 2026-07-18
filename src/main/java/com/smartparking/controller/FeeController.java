@@ -62,12 +62,30 @@ public class FeeController {
     }
 
     /**
-     * 收费统计
+     * 今日已结算记录
+     */
+    @GetMapping("/today-records")
+    public ApiResponse<List<Fee>> getTodayRecords() {
+        List<Fee> records = feeService.getTodayPaidRecords();
+        return ApiResponse.success(records);
+    }
+
+    /**
+     * 收费统计（含今日统计和总体统计）
      */
     @GetMapping("/statistics")
-    public ApiResponse<BigDecimal> getStatistics() {
-        BigDecimal totalRevenue = feeService.getTotalRevenue();
-        return ApiResponse.success(totalRevenue);
+    public ApiResponse<java.util.Map<String, Object>> getStatistics() {
+        java.util.Map<String, Object> todayStats = feeService.getTodayStatistics();
+        java.util.Map<String, Object> overallStats = feeService.getOverallStatistics();
+        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("todayRevenue", todayStats.get("todayRevenue"));
+        result.put("todayOrderCount", todayStats.get("todayOrderCount"));
+        result.put("todayPendingCount", todayStats.get("pendingCount"));
+        result.put("totalRevenue", overallStats.get("totalRevenue"));
+        result.put("totalCount", overallStats.get("totalCount"));
+        result.put("paidCount", overallStats.get("paidCount"));
+        result.put("totalPendingCount", overallStats.get("pendingCount"));
+        return ApiResponse.success(result);
     }
 
     /**
