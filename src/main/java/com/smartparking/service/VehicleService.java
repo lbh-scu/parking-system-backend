@@ -95,7 +95,21 @@ public class VehicleService {
         vehicle.setStatus("EXITED");
         vehicleRepository.save(vehicle);
 
-        // 自动创建费用记录（PENDING状态，放入待结算）
+        // 住户车辆出场不收费，跳过费用记录创建
+        if (Boolean.TRUE.equals(vehicle.getIsResident())) {
+            // 释放车位
+            if (vehicle.getSpotNumber() != null) {
+                parkingSpotRepository.findBySpotNumber(vehicle.getSpotNumber())
+                        .ifPresent(spot -> {
+                            spot.setStatus("FREE");
+                            spot.setCurrentPlate(null);
+                            parkingSpotRepository.save(spot);
+                        });
+            }
+            return vehicle;
+        }
+
+        // 非住户车辆：自动创建费用记录（PENDING状态，放入待结算）
         Duration duration = Duration.between(vehicle.getEntryTime(), exitTime);
         long minutes = duration.toMinutes();
         double hours = minutes / 60.0;
