@@ -4,6 +4,7 @@ import com.smartparking.entity.ParkingSpot;
 import com.smartparking.entity.Vehicle;
 import com.smartparking.repository.ParkingSpotRepository;
 import com.smartparking.repository.VehicleRepository;
+import com.smartparking.util.LicensePlateUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,12 @@ public class VehicleService {
      */
     @Transactional
     public Vehicle vehicleEntry(String plateNumber, String spotNumber) {
+        // 校验车牌格式
+        String plateErr = LicensePlateUtil.validate(plateNumber);
+        if (plateErr != null) {
+            throw new RuntimeException(plateErr);
+        }
+
         // 检查是否已有未出场的同一辆车
         Optional<Vehicle> existing = vehicleRepository.findByPlateNumberAndStatus(plateNumber, "PARKING");
         if (existing.isPresent()) {
