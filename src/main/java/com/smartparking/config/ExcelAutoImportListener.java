@@ -117,13 +117,26 @@ public class ExcelAutoImportListener {
     }
 
     /**
-     * 同步车位状态：将所有在场车辆（status=PARKING）对应的车位标记为 OCCUPIED
+     * 同步车位状态：
+     * 1. 先将所有车位重置为 FREE
+     * 2. 再将所有在场车辆（status=PARKING）对应的车位标记为 OCCUPIED
+     * 这样可以确保已出场（EXITED）车辆的车位被正确释放
      */
     @Transactional
     public void syncParkingSpotsFromVehicles() {
+        // 第一步：将所有车位重置为 FREE
+        List<ParkingSpot> allSpots = parkingSpotRepository.findAll();
+        for (ParkingSpot spot : allSpots) {
+            spot.setStatus("FREE");
+            spot.setCurrentPlate(null);
+            parkingSpotRepository.save(spot);
+        }
+        System.out.printf("[车位同步] 已将 %d 个车位重置为 FREE%n", allSpots.size());
+
+        // 第二步：将PARKING车辆的对应车位设为 OCCUPIED
         List<Vehicle> parkingVehicles = vehicleRepository.findByStatus("PARKING");
         if (parkingVehicles.isEmpty()) {
-            System.out.println("[车位同步] 无在场车辆，跳过");
+            System.out.println("[车位同步] 无在场车辆，跳过标记占用");
             return;
         }
 
@@ -147,7 +160,7 @@ public class ExcelAutoImportListener {
                 System.out.printf("[车位同步] 警告：车辆 %s 关联的车位 %s 不存在%n", plateNumber, spotNumber);
             }
         }
-        System.out.printf("[车位同步] 完成：共同步 %d 个车位%n", updated);
+        System.out.printf("[车位同步] 完成：共同步并标记 %d 个占用车位%n", updated);
     }
 
     @Transactional
