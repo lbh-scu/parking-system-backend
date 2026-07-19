@@ -4,6 +4,7 @@ import com.smartparking.common.ApiResponse;
 import com.smartparking.entity.Fee;
 import com.smartparking.repository.FeeRepository;
 import com.smartparking.service.FeeService;
+import com.smartparking.util.DateTimeUtil;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -100,7 +100,7 @@ public class FeeController {
 
         // 表头
         String[] headers = {"ID", "车牌号", "入场时间", "出场时间", "停车时长(小时)",
-                "费率(元/小时)", "总费用(元)", "状态", "支付时间", "创建时间"};
+                "小时单价", "总费用", "状态", "支付时间", "创建时间"};
         Row headerRow = sheet.createRow(0);
         CellStyle headerStyle = createHeaderStyle(workbook);
 
@@ -110,6 +110,11 @@ public class FeeController {
             cell.setCellStyle(headerStyle);
         }
 
+        // 创建日期样式yyyy-MM-dd HH:mm:ss
+        CellStyle standardDateTimeStyle = workbook.createCellStyle();
+        DataFormat dataFormat = workbook.createDataFormat();
+        standardDateTimeStyle.setDataFormat(dataFormat.getFormat(DateTimeUtil.DATETIME_PATTERN));
+
         // 数据填充
         for (int i = 0; i < fees.size(); i++) {
             Row row = sheet.createRow(i + 1);
@@ -117,19 +122,40 @@ public class FeeController {
 
             row.createCell(0).setCellValue(f.getId() != null ? f.getId().toString() : "");
             row.createCell(1).setCellValue(f.getPlateNumber() != null ? f.getPlateNumber() : "");
-            row.createCell(2).setCellValue(f.getEntryTime() != null ? f.getEntryTime().toString() : "");
-            row.createCell(3).setCellValue(f.getExitTime() != null ? f.getExitTime().toString() : "");
+
+            Cell entryTimeCell = row.createCell(2);
+            if (f.getEntryTime() != null) {
+                entryTimeCell.setCellValue(f.getEntryTime()); // 直接写入LocalDateTime，POI自动转Excel日期序列号
+                entryTimeCell.setCellStyle(standardDateTimeStyle); // 绑定自定义格式，和手动设置完全一致
+            }
+
+            Cell exitTimeCell = row.createCell(3);
+            if (f.getExitTime() != null) {
+                exitTimeCell.setCellValue(f.getExitTime());
+                exitTimeCell.setCellStyle(standardDateTimeStyle);
+            }
+
             row.createCell(4).setCellValue(f.getParkingHours() != null ? f.getParkingHours().toString() : "");
             row.createCell(5).setCellValue(f.getHourlyRate() != null ? f.getHourlyRate().toString() : "");
             row.createCell(6).setCellValue(f.getTotalAmount() != null ? f.getTotalAmount().toString() : "");
             row.createCell(7).setCellValue(f.getStatus() != null ? f.getStatus() : "");
-            row.createCell(8).setCellValue(f.getPaymentTime() != null ? f.getPaymentTime().toString() : "");
-            row.createCell(9).setCellValue(f.getCreatedAt() != null ? f.getCreatedAt().toString() : "");
+
+            Cell payTimeCell = row.createCell(8);
+            if (f.getPaymentTime() != null) {
+                payTimeCell.setCellValue(f.getPaymentTime());
+                payTimeCell.setCellStyle(standardDateTimeStyle);
+            }
+
+            Cell createTimeCell = row.createCell(9);
+            if (f.getCreatedAt() != null) {
+                createTimeCell.setCellValue(f.getCreatedAt());
+                createTimeCell.setCellStyle(standardDateTimeStyle);
+            }
         }
 
-        // 设置列宽为 10
+        // 设置列宽为 20
         for (int i = 0; i < headers.length; i++) {
-            sheet.setColumnWidth(i, 10 * 256);
+            sheet.setColumnWidth(i, 20 * 256);
         }
 
         // 设置响应头

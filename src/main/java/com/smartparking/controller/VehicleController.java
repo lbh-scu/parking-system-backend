@@ -4,6 +4,7 @@ import com.smartparking.common.ApiResponse;
 import com.smartparking.entity.Vehicle;
 import com.smartparking.repository.VehicleRepository;
 import com.smartparking.service.VehicleService;
+import com.smartparking.util.DateTimeUtil;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -83,7 +84,7 @@ public class VehicleController {
         Sheet sheet = workbook.createSheet("车辆记录");
 
         // 表头
-        String[] headers = {"ID", "车牌号", "车位号", "入场时间", "出场时间", "是否为居民", "状态", "创建时间", "更新时间"};
+        String[] headers = {"ID", "车牌号", "车位ID", "车位号", "入场时间", "出场时间", "是否为居民", "状态", "创建时间", "更新时间"};
         Row headerRow = sheet.createRow(0);
         CellStyle headerStyle = createHeaderStyle(workbook);
 
@@ -93,6 +94,11 @@ public class VehicleController {
             cell.setCellStyle(headerStyle);
         }
 
+        // 创建日期样式yyyy-MM-dd HH:mm:ss
+        CellStyle standardDateTimeStyle = workbook.createCellStyle();
+        DataFormat dataFormat = workbook.createDataFormat();
+        standardDateTimeStyle.setDataFormat(dataFormat.getFormat(DateTimeUtil.DATETIME_PATTERN));
+
         // 数据填充
         for (int i = 0; i < vehicles.size(); i++) {
             Row row = sheet.createRow(i + 1);
@@ -100,18 +106,40 @@ public class VehicleController {
 
             row.createCell(0).setCellValue(v.getId() != null ? v.getId().toString() : "");
             row.createCell(1).setCellValue(v.getPlateNumber() != null ? v.getPlateNumber() : "");
-            row.createCell(2).setCellValue(v.getSpotNumber() != null ? v.getSpotNumber() : "");
-            row.createCell(3).setCellValue(v.getEntryTime() != null ? v.getEntryTime().toString() : "");
-            row.createCell(4).setCellValue(v.getExitTime() != null ? v.getExitTime().toString() : "");
-            row.createCell(5).setCellValue(v.getIsResident() != null ? v.getIsResident().toString() : "");      // 是否为居民
-            row.createCell(6).setCellValue(v.getStatus() != null ? v.getStatus() : "");
-            row.createCell(7).setCellValue(v.getCreatedAt() != null ? v.getCreatedAt().toString() : "");
-            row.createCell(8).setCellValue(v.getUpdatedAt() != null ? v.getUpdatedAt().toString() : "");
+            row.createCell(2).setCellValue(v.getSpotId() != null ? v.getSpotId().toString() : "");
+            row.createCell(3).setCellValue(v.getSpotNumber() != null ? v.getSpotNumber() : "");
+
+            Cell entryTimeCell = row.createCell(4);
+            if (v.getEntryTime() != null) {
+                entryTimeCell.setCellValue(v.getEntryTime()); // 直接写入LocalDateTime，不转字符串
+                entryTimeCell.setCellStyle(standardDateTimeStyle); // 绑定自定义日期格式
+            }
+
+            Cell exitTimeCell = row.createCell(5);
+            if (v.getExitTime() != null) {
+                exitTimeCell.setCellValue(v.getExitTime());
+                exitTimeCell.setCellStyle(standardDateTimeStyle);
+            }
+
+            row.createCell(6).setCellValue(v.getIsResident() != null ? v.getIsResident().toString() : "");
+            row.createCell(7).setCellValue(v.getStatus() != null ? v.getStatus() : "");
+
+            Cell createTimeCell = row.createCell(8);
+            if (v.getCreatedAt() != null) {
+                createTimeCell.setCellValue(v.getCreatedAt());
+                createTimeCell.setCellStyle(standardDateTimeStyle);
+            }
+
+            Cell updateTimeCell = row.createCell(9);
+            if (v.getUpdatedAt() != null) {
+                updateTimeCell.setCellValue(v.getUpdatedAt());
+                updateTimeCell.setCellStyle(standardDateTimeStyle);
+            }
         }
 
-        // 设置列宽为 10
+        // 设置列宽为 20
         for (int i = 0; i < headers.length; i++) {
-            sheet.setColumnWidth(i, 10 * 256);
+            sheet.setColumnWidth(i, 20 * 256);
         }
 
         // 设置响应头

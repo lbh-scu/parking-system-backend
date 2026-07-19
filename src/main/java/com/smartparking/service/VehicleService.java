@@ -7,6 +7,7 @@ import com.smartparking.repository.FeeRepository;
 import com.smartparking.repository.ParkingSpotRepository;
 import com.smartparking.repository.ResidentRepository;
 import com.smartparking.repository.VehicleRepository;
+import com.smartparking.util.DateTimeUtil;
 import com.smartparking.util.LicensePlateUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -66,7 +67,7 @@ public class VehicleService {
         vehicle.setSpotNumber(finalSpot);
         vehicle.setSpotId(spot.getId());
         vehicle.setStatus("PARKING");
-        vehicle.setEntryTime(LocalDateTime.now());
+        vehicle.setEntryTime(DateTimeUtil.now());
 
         // 判断车牌是否在住户表，是则标记为小区住户
         boolean isResidentCar = residentRepository.existsByPlateNumber(plateNumber);
@@ -90,7 +91,7 @@ public class VehicleService {
         Vehicle vehicle = vehicleRepository.findByPlateNumberAndStatus(plateNumber, "PARKING")
                 .orElseThrow(() -> new RuntimeException("未找到该车辆的入场记录"));
 
-        LocalDateTime exitTime = LocalDateTime.now();
+        LocalDateTime exitTime = DateTimeUtil.now();
         vehicle.setExitTime(exitTime);
         vehicle.setStatus("EXITED");
         vehicleRepository.save(vehicle);

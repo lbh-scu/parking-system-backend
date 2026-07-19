@@ -1,6 +1,7 @@
 package com.smartparking.entity;
 
 import com.alibaba.excel.annotation.ExcelIgnore;
+import com.alibaba.excel.annotation.ExcelProperty;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -15,14 +16,17 @@ public class Resident {
     @Id
     @ExcelIgnore
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @ExcelProperty("ID")
     private Long id;
 
     // 业主姓名，不可为空
     @Column(name = "user_name", nullable = false, length = 50)
+    @ExcelProperty("用户名")
     private String userName;
 
     // 业主绑定车牌，关联Vehicle、Fee表
     @Column(name = "plate_number", nullable = false, length = 20)
+    @ExcelProperty("车牌号")
     private String plateNumber;
 
 

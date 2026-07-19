@@ -3,6 +3,8 @@ package com.smartparking.entity;
 import com.alibaba.excel.annotation.ExcelIgnore;
 import com.alibaba.excel.annotation.ExcelProperty;
 import jakarta.persistence.*;
+import org.springframework.format.annotation.DateTimeFormat;
+
 import java.time.LocalDateTime;
 import java.util.Objects;
 
@@ -13,7 +15,7 @@ public class Vehicle {
     @Id
     @ExcelIgnore
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @ExcelProperty("记录ID")
+    @ExcelProperty("ID")
     private Long id;
 
     // 车牌号码，车辆唯一标识，不可为空
@@ -23,6 +25,7 @@ public class Vehicle {
 
     // 车位主键ID，关联车位表
     @Column(name = "spot_id")
+    @ExcelProperty("车位ID")
     private Long spotId;
 
     // 车位编号，展示给用户看的车位号
@@ -33,16 +36,18 @@ public class Vehicle {
     // 车辆入场时间,关联fee表
     @Column(name = "entry_time")
     @ExcelProperty("入场时间")
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime entryTime;
 
     // 车辆离场时间,车辆还在场内时为null,关联fee表
     @Column(name = "exit_time")
-    @ExcelProperty("离场时间")
+    @ExcelProperty("出场时间")
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime exitTime;
 
     // 是否为小区常住居民车辆
     @Column(name = "is_resident")
-    @ExcelProperty("是否住户")
+    @ExcelProperty("是否为居民")
     private Boolean isResident = false;
 
     // 车辆状态:"PARKING"：在场停车,"LEAVE"：已离场
@@ -53,11 +58,13 @@ public class Vehicle {
     // 车辆进场记录创建时间
     @Column(name = "created_at")
     @ExcelProperty("创建时间")
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createdAt;
 
     // 记录更新时间
     @Column(name = "updated_at")
     @ExcelProperty("更新时间")
+    @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime updatedAt;
 
     public Vehicle() {}

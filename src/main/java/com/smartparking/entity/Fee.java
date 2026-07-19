@@ -20,7 +20,7 @@ public class Fee {
     @Id
     @ExcelIgnore
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @ExcelProperty("账单ID")
+    @ExcelProperty("ID")
     private Long id;
 
     // 车牌号码
@@ -35,7 +35,7 @@ public class Fee {
 
     // 车辆离场时间,未离场时该字段为null
     @Column(name = "exit_time")
-    @ExcelProperty("离场时间")
+    @ExcelProperty("出场时间")
     private LocalDateTime exitTime;
 
     // 实际停车时长(小时)离场后根据入场,离场时间自动计算
@@ -60,7 +60,7 @@ public class Fee {
 
     // 用户完成缴费的时间,未缴费时为null
     @Column(name = "payment_time")
-    @ExcelProperty("缴费时间")
+    @ExcelProperty("支付时间")
     private LocalDateTime paymentTime;
 
     // 本条账单记录创建时间,车辆入场时自动生成
