@@ -1,10 +1,12 @@
 package com.smartparking.config;
 
 import com.smartparking.entity.Fee;
+import com.smartparking.entity.ParkingSpot;
 import com.smartparking.entity.Resident;
 import com.smartparking.entity.Vehicle;
 import com.smartparking.repository.BaseRepository;
 import com.smartparking.repository.FeeRepository;
+import com.smartparking.repository.ParkingSpotRepository;
 import com.smartparking.repository.ResidentRepository;
 import com.smartparking.repository.VehicleRepository;
 import com.smartparking.util.ExcelUtil;
@@ -34,6 +36,8 @@ public class ExcelAutoImportListener {
     private VehicleRepository vehicleRepository;
     @Resource
     private FeeRepository feeRepository;
+    @Resource
+    private ParkingSpotRepository parkingSpotRepository;
     @Resource
     private InitDataProperties initDataProperties;
 
@@ -104,7 +108,46 @@ public class ExcelAutoImportListener {
                 System.err.printf("[DEBUG 自动导入] 文件【%s】读取IO异常：%s%n", filePath, e.getMessage());
             }
         }
+
+        // ===== 关键补充：同步车位状态 =====
+        // 导入车辆记录后，检查所有 status=PARKING 的车辆，同步更新 parking_spot 表
+        syncParkingSpotsFromVehicles();
+
         System.out.println("===== 项目启动自动Excel导入执行完成 =====");
+    }
+
+    /**
+     * 同步车位状态：将所有在场车辆（status=PARKING）对应的车位标记为 OCCUPIED
+     */
+    @Transactional
+    public void syncParkingSpotsFromVehicles() {
+        List<Vehicle> parkingVehicles = vehicleRepository.findByStatus("PARKING");
+        if (parkingVehicles.isEmpty()) {
+            System.out.println("[车位同步] 无在场车辆，跳过");
+            return;
+        }
+
+        int updated = 0;
+        for (Vehicle v : parkingVehicles) {
+            String spotNumber = v.getSpotNumber();
+            if (spotNumber == null || spotNumber.isBlank()) {
+                continue;
+            }
+            String plateNumber = v.getPlateNumber();
+
+            java.util.Optional<ParkingSpot> opt = parkingSpotRepository.findBySpotNumber(spotNumber);
+            if (opt.isPresent()) {
+                ParkingSpot spot = opt.get();
+                spot.setStatus("OCCUPIED");
+                spot.setCurrentPlate(plateNumber);
+                parkingSpotRepository.save(spot);
+                updated++;
+                System.out.printf("[车位同步] 车位 %s → OCCUPIED（%s）%n", spotNumber, plateNumber);
+            } else {
+                System.out.printf("[车位同步] 警告：车辆 %s 关联的车位 %s 不存在%n", plateNumber, spotNumber);
+            }
+        }
+        System.out.printf("[车位同步] 完成：共同步 %d 个车位%n", updated);
     }
 
     @Transactional
