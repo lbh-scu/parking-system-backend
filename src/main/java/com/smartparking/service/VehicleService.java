@@ -32,7 +32,10 @@ public class VehicleService {
 
     @Autowired
     private ResidentRepository residentRepository;
-    
+
+    @Autowired
+    private FeeService feeService;
+
     /**
      * 车辆入场
      */
@@ -114,8 +117,8 @@ public class VehicleService {
         Duration duration = Duration.between(vehicle.getEntryTime(), exitTime);
         long minutes = duration.toMinutes();
         double hours = minutes / 60.0;
-        BigDecimal hourlyRate = new BigDecimal("5.00");
-        BigDecimal totalAmount = hourlyRate.multiply(BigDecimal.valueOf(Math.max(1, Math.ceil(hours))));
+        BigDecimal totalAmount = feeService.calculateAmount(minutes);
+        BigDecimal hourlyRate = feeService.getHourlyRate();
 
         Fee fee = new Fee();
         fee.setPlateNumber(plateNumber);

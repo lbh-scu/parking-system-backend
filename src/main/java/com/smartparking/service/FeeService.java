@@ -7,6 +7,7 @@ import com.smartparking.repository.VehicleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -23,8 +24,51 @@ public class FeeService {
     @Autowired
     private VehicleRepository vehicleRepository;
 
-    // 每小时费率
-    private static final BigDecimal HOURLY_RATE = new BigDecimal("5.00");
+    @Autowired
+    private SystemConfigService systemConfigService;
+
+    /**
+     * 从 SystemConfig 读取动态费率配置
+     */
+    public BigDecimal getHourlyRate() {
+        return BigDecimal.valueOf(systemConfigService.getConfigDouble("hourly_rate", 5.00));
+    }
+
+    private int getFreeMinutes() {
+        return systemConfigService.getConfigInt("free_minutes", 30);
+    }
+
+    private BigDecimal getDailyMax() {
+        return BigDecimal.valueOf(systemConfigService.getConfigDouble("daily_max", 50.00));
+    }
+
+    /**
+     * 核心计费逻辑：计算停车费用
+     * @param minutes  停车总分钟数
+     * @return 计算后的费用金额
+     */
+    public BigDecimal calculateAmount(long minutes) {
+        BigDecimal hourlyRate = getHourlyRate();
+        int freeMinutes = getFreeMinutes();
+        BigDecimal dailyMax = getDailyMax();
+
+        // 减去免费时长
+        long billableMinutes = Math.max(0, minutes - freeMinutes);
+        if (billableMinutes == 0) {
+            return BigDecimal.ZERO;
+        }
+
+        // 按小时计费，不足1小时按 ceil 取整
+        double billableHours = Math.ceil(billableMinutes / 60.0);
+        BigDecimal amount = hourlyRate.multiply(BigDecimal.valueOf(billableHours));
+
+        // 应用每日封顶
+        if (amount.compareTo(dailyMax) > 0) {
+            amount = dailyMax;
+        }
+
+        return amount.setScale(2, RoundingMode.HALF_UP);
+    }
 
     /**
      * 计算停车费用
@@ -43,20 +87,18 @@ public class FeeService {
         LocalDateTime entryTime = vehicle.getEntryTime();
         LocalDateTime exitTime = LocalDateTime.now();
 
-        // 计算停车时长（小时）
         Duration duration = Duration.between(entryTime, exitTime);
         long minutes = duration.toMinutes();
         double hours = minutes / 60.0;
-
-        // 计算费用（最少按1小时计费）
-        BigDecimal totalAmount = HOURLY_RATE.multiply(BigDecimal.valueOf(Math.max(1, Math.ceil(hours))));
+        BigDecimal totalAmount = calculateAmount(minutes);
+        BigDecimal hourlyRate = getHourlyRate();
 
         Fee fee = new Fee();
         fee.setPlateNumber(plateNumber);
         fee.setEntryTime(entryTime);
         fee.setExitTime(exitTime);
         fee.setParkingHours(hours);
-        fee.setHourlyRate(HOURLY_RATE);
+        fee.setHourlyRate(hourlyRate);
         fee.setTotalAmount(totalAmount);
         fee.setStatus("PENDING");
 
