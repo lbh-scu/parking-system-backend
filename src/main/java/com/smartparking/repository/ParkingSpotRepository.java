@@ -14,8 +14,6 @@ public interface ParkingSpotRepository extends BaseRepository<ParkingSpot, Long>
 
     List<ParkingSpot> findByArea(String area);
 
-    List<ParkingSpot> findByAreaAndFloor(String area, Integer floor);
-
     long countByStatus(String status);
 
     long countByAreaAndStatus(String area, String status);

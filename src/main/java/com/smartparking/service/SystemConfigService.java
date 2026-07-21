@@ -115,7 +115,6 @@ public class SystemConfigService {
                 ParkingSpot spot = new ParkingSpot();
                 spot.setSpotNumber(String.format("%s%03d", area.charAt(0), spotNum));
                 spot.setArea(area);
-                spot.setFloor(1);
                 spot.setStatus("FREE");
                 parkingSpotRepository.save(spot);
             }

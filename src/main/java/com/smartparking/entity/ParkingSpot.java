@@ -18,9 +18,6 @@ public class ParkingSpot {
     @Column(name = "area", nullable = false, length = 10)
     private String area;
 
-    @Column(name = "floor")
-    private Integer floor;
-
     @Column(name = "status", length = 20)
     private String status = "FREE";
 
@@ -39,7 +36,6 @@ public class ParkingSpot {
     public Long getId() { return id; }
     public String getSpotNumber() { return spotNumber; }
     public String getArea() { return area; }
-    public Integer getFloor() { return floor; }
     public String getStatus() { return status; }
     public String getCurrentPlate() { return currentPlate; }
     public LocalDateTime getCreatedAt() { return createdAt; }
@@ -49,7 +45,6 @@ public class ParkingSpot {
     public void setId(Long id) { this.id = id; }
     public void setSpotNumber(String spotNumber) { this.spotNumber = spotNumber; }
     public void setArea(String area) { this.area = area; }
-    public void setFloor(Integer floor) { this.floor = floor; }
     public void setStatus(String status) { this.status = status; }
     public void setCurrentPlate(String currentPlate) { this.currentPlate = currentPlate; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
