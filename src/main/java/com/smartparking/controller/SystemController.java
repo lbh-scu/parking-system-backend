@@ -1,9 +1,9 @@
 package com.smartparking.controller;
 
 import com.smartparking.common.ApiResponse;
+import com.smartparking.service.BackupService;
 import com.smartparking.service.SystemConfigService;
 import com.smartparking.service.SystemLogService;
-import com.smartparking.service.StatisticsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -26,7 +26,7 @@ public class SystemController {
     private SystemConfigService systemConfigService;
 
     @Autowired
-    private StatisticsService statisticsService;
+    private BackupService backupService;
 
     @Autowired
     private SystemLogService systemLogService;
@@ -66,11 +66,12 @@ public class SystemController {
         return ApiResponse.success(logs);
     }
 
-    /** 一键备份 — 复用统计报表导出，生成Excel文件 */
+    /** 一键全量备份 — 导出所有数据表为Excel文件
+     *  包含：收费记录、住户信息、车辆记录、车位数据、系统配置、操作日志 */
     @GetMapping("/backup")
     public ResponseEntity<byte[]> backup() {
-        byte[] data = statisticsService.exportReport();
-        String fn = "数据备份_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".xlsx";
+        byte[] data = backupService.exportFullBackup();
+        String fn = "全量数据备份_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".xlsx";
         HttpHeaders h = new HttpHeaders();
         h.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
         h.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fn + "\"");
