@@ -62,9 +62,13 @@ public class FeeService {
         double billableHours = Math.ceil(billableMinutes / 60.0);
         BigDecimal amount = hourlyRate.multiply(BigDecimal.valueOf(billableHours));
 
-        // 应用每日封顶
-        if (amount.compareTo(dailyMax) > 0) {
-            amount = dailyMax;
+        // 计算停车的天数（向上取整），每日封顶 = dailyMax × 天数
+        double days = Math.ceil(billableHours / 24.0);
+        BigDecimal totalCap = dailyMax.multiply(BigDecimal.valueOf(days));
+
+        // 应用每日封顶（多天则累加封顶）
+        if (amount.compareTo(totalCap) > 0) {
+            amount = totalCap;
         }
 
         return amount.setScale(2, RoundingMode.HALF_UP);
