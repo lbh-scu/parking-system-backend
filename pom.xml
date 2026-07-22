@@ -88,6 +88,12 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Spring Boot AOP -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
         <!-- Apache Commons Math3（线性回归算法） -->
         <dependency>
             <groupId>org.apache.commons</groupId>

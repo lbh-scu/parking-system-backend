@@ -2,6 +2,7 @@ package com.smartparking.controller;
 
 import com.smartparking.common.ApiResponse;
 import com.smartparking.service.SystemConfigService;
+import com.smartparking.service.SystemLogService;
 import com.smartparking.service.StatisticsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -26,6 +27,9 @@ public class SystemController {
 
     @Autowired
     private StatisticsService statisticsService;
+
+    @Autowired
+    private SystemLogService systemLogService;
 
     @Autowired
     private DataSource dataSource;
@@ -57,8 +61,9 @@ public class SystemController {
     }
 
     @GetMapping("/logs")
-    public ApiResponse<List<String>> getLogs() {
-        return ApiResponse.success(List.of("日志功能请在服务端查看"));
+    public ApiResponse<List<String>> getLogs(@RequestParam(defaultValue = "100") int lines) {
+        List<String> logs = systemLogService.getRecentLogsFormatted(lines);
+        return ApiResponse.success(logs);
     }
 
     /** 一键备份 — 复用统计报表导出，生成Excel文件 */
