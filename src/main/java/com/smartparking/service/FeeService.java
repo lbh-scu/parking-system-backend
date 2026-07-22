@@ -81,8 +81,11 @@ public class FeeService {
         }
 
         // 如果没有 PENDING 记录，尝试从在场车辆计算（直接入场后点击计算）
-        Vehicle vehicle = vehicleRepository.findByPlateNumberAndStatus(plateNumber, "PARKING")
-                .orElseThrow(() -> new RuntimeException("未找到该车辆的入场记录"));
+        List<Vehicle> parkingRecords = vehicleRepository.findByPlateNumberAndStatusOrderByEntryTimeDesc(plateNumber, "PARKING");
+        if (parkingRecords.isEmpty()) {
+            throw new RuntimeException("未找到该车辆的入场记录");
+        }
+        Vehicle vehicle = parkingRecords.get(0);
 
         LocalDateTime entryTime = vehicle.getEntryTime();
         LocalDateTime exitTime = LocalDateTime.now();

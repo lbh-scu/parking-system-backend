@@ -42,8 +42,8 @@ public class VehicleService {
     @Transactional
     public Vehicle vehicleEntry(String plateNumber, String spotNumber) {
         // 检查是否已有未出场的同一辆车
-        Optional<Vehicle> existing = vehicleRepository.findByPlateNumberAndStatus(plateNumber, "PARKING");
-        if (existing.isPresent()) {
+        List<Vehicle> existing = vehicleRepository.findByPlateNumberAndStatusOrderByEntryTimeDesc(plateNumber, "PARKING");
+        if (!existing.isEmpty()) {
             throw new RuntimeException("该车辆已在停车场内");
         }
 
@@ -91,15 +91,18 @@ public class VehicleService {
      */
     @Transactional
     public Vehicle vehicleExit(String plateNumber) {
-        Vehicle vehicle = vehicleRepository.findByPlateNumberAndStatus(plateNumber, "PARKING")
-                .orElseThrow(() -> new RuntimeException("未找到该车辆的入场记录"));
+        List<Vehicle> parkingRecords = vehicleRepository.findByPlateNumberAndStatusOrderByEntryTimeDesc(plateNumber, "PARKING");
+        if (parkingRecords.isEmpty()) {
+            throw new RuntimeException("未找到该车辆的入场记录");
+        }
+        Vehicle vehicle = parkingRecords.get(0);
 
         LocalDateTime exitTime = DateTimeUtil.now();
         vehicle.setExitTime(exitTime);
         vehicle.setStatus("EXITED");
         vehicleRepository.save(vehicle);
 
-        // 住户车辆出场不收费，跳过费用记录创建
+        // 住户车辆出场：直接释放车位，不创建费用记录
         if (Boolean.TRUE.equals(vehicle.getIsResident())) {
             // 释放车位
             if (vehicle.getSpotNumber() != null) {

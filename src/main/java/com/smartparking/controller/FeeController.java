@@ -16,6 +16,8 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import org.springframework.http.ResponseEntity;
+
 @RestController
 @RequestMapping("/fees")
 public class FeeController {
@@ -30,12 +32,12 @@ public class FeeController {
      * 计算停车费用
      */
     @PostMapping("/calculate")
-    public ApiResponse<Fee> calculateFee(@RequestParam String plateNumber) {
+    public ResponseEntity<ApiResponse<Fee>> calculateFee(@RequestParam String plateNumber) {
         try {
             Fee fee = feeService.calculateFee(plateNumber);
-            return ApiResponse.success("费用计算成功", fee);
+            return ResponseEntity.ok(ApiResponse.success("费用计算成功", fee));
         } catch (Exception e) {
-            return ApiResponse.error(400, e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.error(400, e.getMessage()));
         }
     }
 
@@ -43,12 +45,12 @@ public class FeeController {
      * 支付费用
      */
     @PostMapping("/pay")
-    public ApiResponse<Fee> payFee(@RequestParam Long feeId) {
+    public ResponseEntity<ApiResponse<Fee>> payFee(@RequestParam Long feeId) {
         try {
             Fee fee = feeService.payFee(feeId);
-            return ApiResponse.success("支付成功", fee);
+            return ResponseEntity.ok(ApiResponse.success("支付成功", fee));
         } catch (Exception e) {
-            return ApiResponse.error(400, e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.error(400, e.getMessage()));
         }
     }
 
