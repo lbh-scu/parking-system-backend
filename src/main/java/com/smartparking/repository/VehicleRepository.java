@@ -20,8 +20,8 @@ public interface VehicleRepository extends BaseRepository<Vehicle, Long> {
     // 查找指定状态的车辆
     List<Vehicle> findByStatusOrderByEntryTimeDesc(String status);
 
-    // 根据车牌号和状态查找
-    Optional<Vehicle> findByPlateNumberAndStatus(String plateNumber, String status);
+    // 根据车牌号和状态查找（按入场时间降序，取最近一条）
+    List<Vehicle> findByPlateNumberAndStatusOrderByEntryTimeDesc(String plateNumber, String status);
 
     // 根据是否住户查找
     List<Vehicle> findByIsResident(Boolean isResident);

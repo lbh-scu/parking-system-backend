@@ -8,6 +8,7 @@ import com.smartparking.util.DateTimeUtil;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -30,14 +31,14 @@ public class VehicleController {
      * 车辆入场
      */
     @PostMapping("/entry")
-    public ApiResponse<Vehicle> vehicleEntry(
+    public ResponseEntity<ApiResponse<Vehicle>> vehicleEntry(
             @RequestParam String plateNumber,
             @RequestParam String spotNumber) {
         try {
             Vehicle vehicle = vehicleService.vehicleEntry(plateNumber, spotNumber);
-            return ApiResponse.success("车辆入场成功", vehicle);
+            return ResponseEntity.ok(ApiResponse.success("车辆入场成功", vehicle));
         } catch (Exception e) {
-            return ApiResponse.error(400, e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.error(400, e.getMessage()));
         }
     }
 
@@ -45,12 +46,12 @@ public class VehicleController {
      * 车辆出场
      */
     @PostMapping("/exit")
-    public ApiResponse<Vehicle> vehicleExit(@RequestParam String plateNumber) {
+    public ResponseEntity<ApiResponse<Vehicle>> vehicleExit(@RequestParam String plateNumber) {
         try {
             Vehicle vehicle = vehicleService.vehicleExit(plateNumber);
-            return ApiResponse.success("车辆出场成功", vehicle);
+            return ResponseEntity.ok(ApiResponse.success("车辆出场成功", vehicle));
         } catch (Exception e) {
-            return ApiResponse.error(400, e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.error(400, e.getMessage()));
         }
     }
 

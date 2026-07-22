@@ -75,10 +75,9 @@ public class FeeService {
      * 每次调用都会重新计算（使用最新的 SystemConfig 费率配置）
      */
     public Fee calculateFee(String plateNumber) {
-        // 优先更新已存在的 PENDING 费用记录
+        // 优先更新已存在的 PENDING 费用记录（使用最新配置重新计算）
         List<Fee> pendingFees = feeRepository.findByPlateNumberAndStatus(plateNumber, "PENDING");
         if (!pendingFees.isEmpty()) {
-            // 重新使用最新配置计算费用
             Fee existing = pendingFees.get(0);
             if (existing.getExitTime() == null) {
                 existing.setExitTime(LocalDateTime.now());
@@ -91,9 +90,12 @@ public class FeeService {
             return feeRepository.save(existing);
         }
 
-        // 如果没有 PENDING 记录，尝试从在场车辆计算
-        Vehicle vehicle = vehicleRepository.findByPlateNumberAndStatus(plateNumber, "PARKING")
-                .orElseThrow(() -> new RuntimeException("未找到该车辆的入场记录"));
+        // 如果没有 PENDING 记录，尝试从在场车辆计算（按入场时间降序取最新记录）
+        List<Vehicle> parkingRecords = vehicleRepository.findByPlateNumberAndStatusOrderByEntryTimeDesc(plateNumber, "PARKING");
+        if (parkingRecords.isEmpty()) {
+            throw new RuntimeException("未找到该车辆的入场记录");
+        }
+        Vehicle vehicle = parkingRecords.get(0);
 
         LocalDateTime entryTime = vehicle.getEntryTime();
         LocalDateTime exitTime = LocalDateTime.now();

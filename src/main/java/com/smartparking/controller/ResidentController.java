@@ -39,6 +39,15 @@ public class ResidentController {
         return ApiResponse.success(residents);
     }
 
+    /**
+     * 根据车牌号搜索住户
+     */
+    @GetMapping("/search")
+    public ApiResponse<List<Resident>> searchByPlate(@RequestParam String plateNumber) {
+        List<Resident> residents = residentRepository.findByPlateNumber(plateNumber);
+        return ApiResponse.success(residents);
+    }
+
     @PostMapping("/resident/add")
     public ApiResponse<Void> addResident(@RequestBody ResidentDTO dto) {
         return residentService.addResident(dto);
