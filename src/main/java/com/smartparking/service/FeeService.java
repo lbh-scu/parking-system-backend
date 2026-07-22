@@ -72,15 +72,26 @@ public class FeeService {
 
     /**
      * 计算停车费用
+     * 每次调用都会重新计算（使用最新的 SystemConfig 费率配置）
      */
     public Fee calculateFee(String plateNumber) {
-        // 优先查找已存在的 PENDING 费用记录（车辆出场时已自动创建）
+        // 优先更新已存在的 PENDING 费用记录
         List<Fee> pendingFees = feeRepository.findByPlateNumberAndStatus(plateNumber, "PENDING");
         if (!pendingFees.isEmpty()) {
-            return pendingFees.get(0);
+            // 重新使用最新配置计算费用
+            Fee existing = pendingFees.get(0);
+            if (existing.getExitTime() == null) {
+                existing.setExitTime(LocalDateTime.now());
+            }
+            long minutes = Duration.between(existing.getEntryTime(), existing.getExitTime()).toMinutes();
+            existing.setParkingHours(minutes / 60.0);
+            BigDecimal newAmount = calculateAmount(minutes);
+            existing.setTotalAmount(newAmount);
+            existing.setHourlyRate(getHourlyRate());
+            return feeRepository.save(existing);
         }
 
-        // 如果没有 PENDING 记录，尝试从在场车辆计算（直接入场后点击计算）
+        // 如果没有 PENDING 记录，尝试从在场车辆计算
         Vehicle vehicle = vehicleRepository.findByPlateNumberAndStatus(plateNumber, "PARKING")
                 .orElseThrow(() -> new RuntimeException("未找到该车辆的入场记录"));
 
