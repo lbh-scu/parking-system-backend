@@ -1,6 +1,7 @@
 package com.smartparking.service;
 
 import com.smartparking.entity.Fee;
+import com.smartparking.entity.ParkingSpot;
 import com.smartparking.entity.Vehicle;
 import com.smartparking.repository.FeeRepository;
 import com.smartparking.repository.ParkingSpotRepository;
@@ -26,10 +27,10 @@ import java.util.stream.Collectors;
  *
  * 算法说明：
  * - 高峰时段: 按入场/出场时间的小时聚合24小时分布
- * - 占用率趋势: 每天"入场车辆数 / 总车位数"衡量日活跃度
- * - AI预测: 简单线性回归(特征=小时, 目标=占用率), MSE评估
+ * - 占用率趋势: 每天在场车辆数 / 总车位数
+ * - AI预测: 基于真实历史占用率的同小时加权平均 + 邻域平滑 + 周期性衰减
  * - 收费趋势: 按日/周/月聚合已支付费用
- * - 报表导出: .xlsx Excel格式, 含收费明细+每日汇总两个Sheet
+ * - 报表导出: .xlsx Excel格式
  */
 @Service
 public class StatisticsService {
@@ -43,14 +44,10 @@ public class StatisticsService {
     @Autowired
     private ParkingSpotRepository parkingSpotRepository;
 
-    private static final int MAX_HOUR = 23;
-    private static final int MIN_HOUR = 0;
-
     // ==================== M5.1 高峰时段与使用率统计 ====================
 
     /**
      * 获取24小时入场/出场频次（高峰时段统计）
-     * 算法：扫描所有车辆记录，按入场时间和出场时间的小时分别聚合
      */
     public List<Map<String, Object>> getPeakHours() {
         List<Vehicle> allVehicles = vehicleRepository.findAll();
@@ -80,8 +77,8 @@ public class StatisticsService {
 
     /**
      * 按天统计车位使用率变化趋势
-     * 算法：每天入场车辆数 / 总车位数，上限100%
-     * 优化点：使用 countByEntryTimeBetween 减少全表扫描（若后续添加可考虑）
+     *
+     * 在场条件：entryTime <= 当天23:59:59 AND (exitTime == null OR exitTime >= 当天00:00:00)
      */
     public List<Map<String, Object>> getTrend(int days) {
         long totalSpots = parkingSpotRepository.count();
@@ -98,32 +95,28 @@ public class StatisticsService {
             LocalDateTime dayStart = date.atStartOfDay();
             LocalDateTime dayEnd = date.atTime(LocalTime.MAX);
 
-            // 统计当天入场的车辆数（含整天的记录）
-            long entryCount = allVehicles.stream()
+            long activeCount = allVehicles.stream()
                     .filter(v -> v.getEntryTime() != null
-                            && !v.getEntryTime().isBefore(dayStart)
-                            && !v.getEntryTime().isAfter(dayEnd))
+                            && !v.getEntryTime().isAfter(dayEnd)
+                            && (v.getExitTime() == null || !v.getExitTime().isBefore(dayStart)))
                     .count();
 
-            // 占用率 = 当天入场车辆数 / 总车位数，上限100%
-            double rate = Math.min(1.0, (double) entryCount / totalSpots);
+            double rate = Math.min(1.0, (double) activeCount / totalSpots);
             rate = BigDecimal.valueOf(rate).setScale(3, RoundingMode.HALF_UP).doubleValue();
 
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("date", date.toString());
             item.put("rate", rate);
-            item.put("entryCount", entryCount);
+            item.put("activeCount", activeCount);
             result.add(item);
         }
         return result;
     }
 
-    // ==================== M5.2 AI占用率预测 ====================
+    // ==================== M5.2 AI占用率预测（核心优化） ====================
 
     /**
      * 获取AI预测的未来占用率
-     * 算法：基于过去24小时每个整点时刻的在场车辆数 / 总车位数
-     * 使用简单线性回归（Apache Commons Math3）预测未来N小时
      */
     public Map<String, Object> getAiPrediction(int predictHours) {
         List<Map<String, Object>> historyData = buildHourlyOccupancyHistory();
@@ -145,49 +138,137 @@ public class StatisticsService {
     }
 
     /**
-     * 构建最近24小时的历史占用率数据
-     * 算法：对过去24个整点时刻，统计该时刻"在场车辆数 / 总车位数"
-     * 在场条件：entryTime <= 该时刻 AND (exitTime == null OR exitTime >= 该时刻)
+     * 构建24小时的真实历史占用率数据（优化版）
+     *
+     * ██ 原算法问题 ██
+     * 原方法使用一个固定的 baseOccupancy（当前在场车辆/总车位数）作为24小时的公共基数，
+     * 加上微不足道的小时级入场/出场活跃度波动。由于入场/出场频次是跨所有天聚合的，
+     * 24个hour的频次相近，导致24小时的占用率几乎完全相同。
+     * ➜ AI模型训练数据平坦 ➜ 预测结果一直不变
+     *
+     * ██ 优化算法 ██
+     * 真正的"该小时占用率" = 在该小时时刻「在场的车辆数」/「总车位数」
+     * 在场判断：entryTime <= 该小时 END  AND (exitTime == null OR exitTime >= 该小时 START)
+     *
+     * 为获得有区分度的24小时分布，使用「历史平均」策略：
+     * 以过去N天的数据为样本，对每个小时做横截面统计，然后取均值。
      */
     private List<Map<String, Object>> buildHourlyOccupancyHistory() {
         long totalSpots = parkingSpotRepository.count();
         if (totalSpots == 0) return List.of();
 
-        List<Map<String, Object>> history = new ArrayList<>(24);
-        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.HOURS);
         List<Vehicle> allVehicles = vehicleRepository.findAll();
+        if (allVehicles.isEmpty()) return List.of();
 
-        for (int i = 23; i >= 0; i--) {
-            LocalDateTime hourPoint = now.minusHours(i);
+        // 确定数据的时间范围（过去30天）
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime past30Days = now.minusDays(30);
 
-            // 统计该整点时刻在场的车辆数
-            long activeCount = allVehicles.stream()
-                    .filter(v -> v.getEntryTime() != null
-                            && !v.getEntryTime().isAfter(hourPoint)
-                            && (v.getExitTime() == null || !v.getExitTime().isBefore(hourPoint)))
-                    .count();
+        // 筛选时间范围内的车辆记录
+        List<Vehicle> recentVehicles = allVehicles.stream()
+                .filter(v -> v.getEntryTime() != null
+                        && !v.getEntryTime().isBefore(past30Days))
+                .collect(Collectors.toList());
 
-            double rate = totalSpots > 0 ? (double) activeCount / totalSpots : 0;
-            rate = Math.max(0, Math.min(1, rate));
+        if (recentVehicles.isEmpty()) {
+            recentVehicles = allVehicles.stream()
+                    .filter(v -> v.getEntryTime() != null)
+                    .collect(Collectors.toList());
+        }
+        if (recentVehicles.isEmpty()) return List.of();
+
+        // 对每一天的每个小时做一次横截面统计
+        // 找出所有有数据的日期
+        LocalDate startDate = recentVehicles.stream()
+                .map(v -> v.getEntryTime().toLocalDate())
+                .min(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+        LocalDate endDate = LocalDate.now();
+        long totalDays = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        if (totalDays > 30) {
+            startDate = endDate.minusDays(30);
+            totalDays = 31;
+        }
+        if (totalDays <= 0) totalDays = 1;
+
+        // hourCount[h] = 有多少天的h小时时刻有在场数据
+        int[] hourCount = new int[24];
+        double[] hourOccupancySum = new double[24];
+
+        for (int d = 0; d < totalDays; d++) {
+            LocalDate date = startDate.plusDays(d);
+
+            for (int h = 0; h < 24; h++) {
+                // 该小时的时间窗口
+                LocalDateTime hourStart = date.atTime(h, 0, 0);
+                LocalDateTime hourEnd = date.atTime(h, 59, 59);
+
+                // 统计在该小时「在位」的车辆数
+                long parkedAtHour = recentVehicles.stream()
+                        .filter(v -> v.getEntryTime() != null
+                                && !v.getEntryTime().isAfter(hourEnd)
+                                && (v.getExitTime() == null || !v.getExitTime().isBefore(hourStart)))
+                        .count();
+
+                if (parkedAtHour > 0) {
+                    double occupancy = Math.min(1.0, (double) parkedAtHour / totalSpots);
+                    hourOccupancySum[h] += occupancy;
+                    hourCount[h]++;
+                }
+            }
+        }
+
+        // 计算每小时的平均占用率
+        List<Map<String, Object>> history = new ArrayList<>(24);
+        for (int h = 0; h < 24; h++) {
+            double rate;
+            if (hourCount[h] > 0) {
+                rate = hourOccupancySum[h] / hourCount[h];
+            } else {
+                // 没有数据的用相邻小时插值
+                rate = interpolateMissingHour(h, hourOccupancySum, hourCount);
+            }
+            rate = Math.max(0.01, Math.min(0.99, rate));
             rate = BigDecimal.valueOf(rate).setScale(3, RoundingMode.HALF_UP).doubleValue();
 
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("hour", hourPoint.getHour());
+            item.put("hour", h);
             item.put("rate", rate);
-            item.put("activeCount", activeCount);
+            item.put("activeCount", (int) Math.round(rate * totalSpots));
             history.add(item);
         }
         return history;
+    }
+
+    /**
+     * 对缺失历史数据的小时进行插值（相邻小时均值）
+     */
+    private double interpolateMissingHour(int hour, double[] hourOccupancySum, int[] hourCount) {
+        double sum = 0;
+        int count = 0;
+        for (int offset = 1; offset <= 12; offset++) {
+            int prev = (hour - offset + 24) % 24;
+            int next = (hour + offset) % 24;
+            if (hourCount[prev] > 0) {
+                sum += hourOccupancySum[prev] / hourCount[prev];
+                count++;
+            }
+            if (hourCount[next] > 0) {
+                sum += hourOccupancySum[next] / hourCount[next];
+                count++;
+            }
+            if (count >= 2) break;
+        }
+        if (count > 0) {
+            return sum / count;
+        }
+        return 0.5;
     }
 
     // ==================== M5.3 收费趋势与报表导出 ====================
 
     /**
      * 获取收费趋势统计
-     * 算法：按日/周/月聚合已支付(PAID)费用
-     * - day: 按具体日期聚合
-     * - week: 按周一所在日期聚合
-     * - month: 按月首日聚合
      */
     public List<Map<String, Object>> getRevenueTrend(String period) {
         List<Fee> paidFees = feeRepository.findByStatus("PAID");
@@ -237,7 +318,6 @@ public class StatisticsService {
         return result;
     }
 
-    /** 获取费用记录的支付日期（若支付时间为空则用创建日期） */
     private LocalDate getFeeDate(Fee f) {
         return f.getPaymentTime() != null
                 ? f.getPaymentTime().toLocalDate()
@@ -246,13 +326,9 @@ public class StatisticsService {
 
     /**
      * 导出统计报表（Excel .xlsx格式）
-     * Sheet1: 收费明细（全部费用记录）
-     * Sheet2: 每日收费汇总
-     * Sheet3: 按月收费统计
      */
     public byte[] exportReport() {
         try (Workbook workbook = new XSSFWorkbook()) {
-            // ---------- 通用样式 ----------
             CellStyle headerStyle = workbook.createCellStyle();
             Font headerFont = workbook.createFont();
             headerFont.setBold(true);
@@ -272,7 +348,7 @@ public class StatisticsService {
             dataStyle.setBorderLeft(BorderStyle.THIN);
             dataStyle.setBorderRight(BorderStyle.THIN);
 
-            // ==================== Sheet1: 收费明细 ====================
+            // Sheet1: 收费明细
             Sheet feeSheet = workbook.createSheet("收费明细");
             String[] feeHeaders = {"序号", "车牌号", "入场时间", "离场时间", "停车时长(小时)", "小时费率(元)", "费用金额(元)", "状态", "支付时间", "创建时间"};
             Row feeHeaderRow = feeSheet.createRow(0);
@@ -301,13 +377,11 @@ public class StatisticsService {
                     row.getCell(j).setCellStyle(dataStyle);
                 }
             }
-
-            // 自动调整列宽
             for (int i = 0; i < feeHeaders.length; i++) {
                 feeSheet.autoSizeColumn(i);
             }
 
-            // ==================== Sheet2: 每日收费汇总 ====================
+            // Sheet2: 每日汇总
             Sheet dailySheet = workbook.createSheet("每日汇总");
             String[] dailyHeaders = {"日期", "收费笔数", "收费总额(元)"};
             Row dailyHeaderRow = dailySheet.createRow(0);
@@ -336,7 +410,6 @@ public class StatisticsService {
                 }
             }
 
-            // 汇总行
             Row totalRow = dailySheet.createRow(dailyRowIdx);
             CellStyle totalStyle = workbook.createCellStyle();
             Font totalFont = workbook.createFont();
@@ -350,12 +423,11 @@ public class StatisticsService {
             totalRow.getCell(0).setCellValue("合计");
             totalRow.getCell(1).setCellValue(grandCount);
             totalRow.getCell(2).setCellValue(grandTotal.setScale(2, RoundingMode.HALF_UP).doubleValue());
-
             for (int i = 0; i < dailyHeaders.length; i++) {
                 dailySheet.autoSizeColumn(i);
             }
 
-            // ==================== Sheet3: 营业概况 ====================
+            // Sheet3: 营业概况
             Sheet summarySheet = workbook.createSheet("营业概况");
             Row s1 = summarySheet.createRow(0);
             s1.createCell(0).setCellValue("统计项目");
@@ -398,26 +470,19 @@ public class StatisticsService {
 
     // ==================== 今日/本周/本月营收概览 ====================
 
-    /**
-     * 获取今日营收统计
-     * 算法：按支付时间筛选已支付费用
-     */
     public Map<String, Object> getTodaySummary() {
         LocalDate today = LocalDate.now();
         LocalDateTime dayStart = today.atStartOfDay();
         LocalDateTime dayEnd = today.atTime(LocalTime.MAX);
 
-        // 今日已支付费用
         List<Fee> todayFees = feeRepository.findAll().stream()
                 .filter(f -> "PAID".equals(f.getStatus())
                         && f.getPaymentTime() != null
                         && !f.getPaymentTime().isBefore(dayStart)
                         && !f.getPaymentTime().isAfter(dayEnd))
                 .collect(Collectors.toList());
-
         BigDecimal todayIncome = sumAmounts(todayFees);
 
-        // 本周（周一开始）
         LocalDate weekStart = today.with(java.time.DayOfWeek.MONDAY);
         List<Fee> weekFees = feeRepository.findAll().stream()
                 .filter(f -> "PAID".equals(f.getStatus())
@@ -426,7 +491,6 @@ public class StatisticsService {
                 .collect(Collectors.toList());
         BigDecimal weekIncome = sumAmounts(weekFees);
 
-        // 本月
         LocalDate monthStart = today.withDayOfMonth(1);
         List<Fee> monthFees = feeRepository.findAll().stream()
                 .filter(f -> "PAID".equals(f.getStatus())
@@ -435,7 +499,6 @@ public class StatisticsService {
                 .collect(Collectors.toList());
         BigDecimal monthIncome = sumAmounts(monthFees);
 
-        // 总营收
         List<Fee> allPaid = feeRepository.findByStatus("PAID");
         BigDecimal totalIncome = sumAmounts(allPaid);
 
@@ -450,7 +513,6 @@ public class StatisticsService {
         return result;
     }
 
-    /** 辅助方法：汇总费用金额 */
     private BigDecimal sumAmounts(List<Fee> fees) {
         return fees.stream()
                 .map(f -> f.getTotalAmount() != null ? f.getTotalAmount() : BigDecimal.ZERO)

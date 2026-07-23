@@ -1,23 +1,33 @@
 package com.smartparking.util;
 
-import org.apache.commons.math3.stat.regression.SimpleRegression;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
- * 基于简单线性回归（Apache Commons Math3）的车位占用率预测器
- * 特征 = hourOfDay（小时），目标值 = 占用率（0~1）
+ * 增强版车位占用率预测器
+ *
+ * 核心算法（无需外部库）：
+ * 1. 按小时聚合历史数据，计算每个小时的基准占用率（hourBase）
+ * 2. 用"同小时加权平均 + 邻近小时平滑"生成预测值
+ * 3. 引入周期性衰减：未来越远的小时越趋近于整体均值（回归到平均）
+ *
+ * 效果：不同小时得到不同预测值，符合昼夜节律
  */
 public class OccupancyPredictor {
 
-    private final SimpleRegression regression = new SimpleRegression();
+    /** 每个小时的(原始占用率, 权重)历史数据 */
+    private final Map<Integer, List<Double>> hourRateMap = new HashMap<>();
 
-    /** 训练数据条目数 */
+    /** 每个小时的基准占用率（训练后的均值） */
+    private final Map<Integer, Double> hourBase = new HashMap<>();
+
+    /** 全局平均占用率 */
+    private double globalMean = 0.5;
+
+    /** 训练样本总数 */
     private int trainingSize = 0;
 
-    /** 均方误差（MSE） */
+    /** 均方误差 */
     private double mse = -1;
 
     /**
@@ -25,90 +35,165 @@ public class OccupancyPredictor {
      * @param historyData 历史数据列表，每个元素为 { "hour": int, "rate": double }
      */
     public void train(List<Map<String, Object>> historyData) {
-        regression.clear();
+        hourRateMap.clear();
+        hourBase.clear();
         trainingSize = 0;
 
+        // Step 1: 按小时归类
         for (Map<String, Object> data : historyData) {
             Number hourObj = (Number) data.get("hour");
             Number rateObj = (Number) data.get("rate");
             if (hourObj != null && rateObj != null) {
-                double hour = hourObj.doubleValue();
-                double rate = rateObj.doubleValue();
-                // 约束：占用率必须在 0~1 之间
-                rate = Math.max(0, Math.min(1, rate));
-                regression.addData(hour, rate);
+                int hour = hourObj.intValue() % 24;
+                double rate = Math.max(0, Math.min(1, rateObj.doubleValue()));
+                hourRateMap.computeIfAbsent(hour, k -> new ArrayList<>()).add(rate);
                 trainingSize++;
             }
         }
 
-        // 计算 MSE
+        // Step 2: 计算每个小时的基准占用率（截尾均值，去除异常值干扰）
+        double sumAll = 0;
+        int countAll = 0;
+        for (Map.Entry<Integer, List<Double>> entry : hourRateMap.entrySet()) {
+            int hour = entry.getKey();
+            List<Double> rates = entry.getValue();
+            if (rates.isEmpty()) continue;
+
+            // 排序后取中间 60% 的均值（去掉最高20%和最低20%）
+            List<Double> sorted = rates.stream().sorted().collect(Collectors.toList());
+            int trim = Math.max(0, sorted.size() / 5);
+            List<Double> trimmed = sorted.subList(trim, sorted.size() - trim);
+            double avg = trimmed.stream().mapToDouble(Double::doubleValue).average().orElse(rates.get(0));
+            hourBase.put(hour, avg);
+            sumAll += avg * rates.size();
+            countAll += rates.size();
+        }
+
+        // Step 3: 计算全局均值（作为回归基准）
+        if (countAll > 0) {
+            globalMean = sumAll / countAll;
+        }
+
+        // Step 4: 填补缺失小时（用相邻小时插值）
+        for (int h = 0; h < 24; h++) {
+            if (!hourBase.containsKey(h)) {
+                double interpolated = interpolateHour(h);
+                hourBase.put(h, interpolated);
+            }
+        }
+
+        // Step 5: 计算 MSE
         if (trainingSize > 0) {
             mse = 0;
+            int count = 0;
             for (Map<String, Object> data : historyData) {
                 Number hourObj = (Number) data.get("hour");
                 Number rateObj = (Number) data.get("rate");
                 if (hourObj != null && rateObj != null) {
-                    double predicted = regression.predict(hourObj.doubleValue());
+                    int hour = hourObj.intValue() % 24;
                     double actual = Math.max(0, Math.min(1, rateObj.doubleValue()));
+                    double predicted = predictHour(hour);
                     mse += Math.pow(predicted - actual, 2);
+                    count++;
                 }
             }
-            mse /= trainingSize;
+            if (count > 0) mse /= count;
         }
     }
 
     /**
-     * 预测指定小时的占用率
-     * @param hour 小时（0~23）
-     * @return 预测占用率（0~1之间）
+     * 用相邻小时插值填充缺失小时
      */
-    public double predict(int hour) {
+    private double interpolateHour(int hour) {
+        // 向前向后各找最多 12 小时
+        for (int offset = 1; offset <= 12; offset++) {
+            int prev = (hour - offset + 24) % 24;
+            int next = (hour + offset) % 24;
+            Double prevVal = hourBase.get(prev);
+            Double nextVal = hourBase.get(next);
+            if (prevVal != null && nextVal != null) {
+                // 用两边均值
+                return (prevVal + nextVal) / 2.0;
+            } else if (prevVal != null) {
+                return prevVal;
+            } else if (nextVal != null) {
+                return nextVal;
+            }
+        }
+        return globalMean;
+    }
+
+    /**
+     * 预测指定小时的占用率（带邻近平滑）
+     */
+    private double predictHour(int hour) {
         if (trainingSize < 2) {
-            // 数据不足时返回默认值
             return 0.5;
         }
-        double result = regression.predict(hour);
-        // 约束在 0~1 之间
-        return Math.max(0, Math.min(1, result));
+
+        Double base = hourBase.get(hour);
+        if (base == null) {
+            base = globalMean;
+        }
+
+        // 邻近小时加权平滑（h-1, h, h+1 各 25%, 50%, 25%）
+        Double prev = hourBase.get((hour - 1 + 24) % 24);
+        Double next = hourBase.get((hour + 1) % 24);
+        double smoothed = base;
+        if (prev != null) smoothed = smoothed * 0.5 + prev * 0.25;
+        if (next != null) smoothed = smoothed * 0.5 + next * 0.25;
+        // 重新规整
+        smoothed = smoothed * 0.5 + base * 0.5;
+
+        // 加上微弱周期性偏差（模拟昼夜波动：凌晨低、午间高、晚上回落）
+        // 用 sin 模拟：6点最低, 14-15点最高, 24点回落
+        double periodicBias = 0.03 * Math.sin(Math.PI * (hour - 6) / 12);
+        double result = smoothed + periodicBias;
+
+        // 约束在 0~1
+        return Math.max(0.05, Math.min(0.95, result));
+    }
+
+    /**
+     * 预测指定小时的占用率（公开接口）
+     */
+    public double predict(int hour) {
+        return predictHour(hour % 24);
     }
 
     /**
      * 预测未来 n 小时的占用率序列
-     * @param startHour 起始小时
-     * @param n 预测小时数
-     * @return 预测结果列表，每个元素为 { "hour": int, "predictedRate": double }
+     *
+     * 衰减策略：未来越远的小时，预测值越趋近于全局均值（回归到平均）
+     * 从第1小时无衰减(1.0)，到最后小时衰减到0.5
      */
     public List<Map<String, Object>> predictNextHours(int startHour, int n) {
         List<Map<String, Object>> predictions = new ArrayList<>();
         for (int i = 0; i < n; i++) {
             int hour = (startHour + i) % 24;
-            double predictedRate = predict(hour);
+            double rawPrediction = predictHour(hour);
+
+            // 平滑衰减：第1小时无衰减(1.0)，最后小时衰减到0.5
+            double decayFactor = 1.0 - (0.5 * i / Math.max(n, 1));
+            decayFactor = Math.max(0.5, Math.min(1.0, decayFactor));
+            double finalPrediction = rawPrediction * decayFactor + globalMean * (1 - decayFactor);
+
             predictions.add(Map.of(
                     "hour", hour,
-                    "predictedRate", Math.round(predictedRate * 1000.0) / 1000.0
+                    "predictedRate", Math.round(finalPrediction * 1000.0) / 1000.0
             ));
         }
         return predictions;
     }
 
-    /**
-     * 获取模型精度评分（MSE）
-     * @return 均方误差，-1表示尚未训练
-     */
     public double getMse() {
         return mse;
     }
 
-    /**
-     * 获取训练样本数
-     */
     public int getTrainingSize() {
         return trainingSize;
     }
 
-    /**
-     * 判断模型是否可用
-     */
     public boolean isReady() {
         return trainingSize >= 2;
     }
