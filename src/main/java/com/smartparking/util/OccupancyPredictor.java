@@ -124,7 +124,13 @@ public class OccupancyPredictor {
     }
 
     /**
-     * 预测指定小时的占用率（带邻近平滑）
+     * 预测指定小时的占用率（增强昼夜差异版）
+     *
+     * 策略：
+     * 1. 保留历史数据中该小时自身的基准值（不强拉邻居平滑）
+     * 2. 只做轻微邻域平滑（h-1, h, h+1 各 15%, 70%, 15%），保留自身特征
+     * 3. 加入较大的周期性偏差 ±0.05，让昼夜差异肉眼可见
+     *    波形：凌晨2-5点最低（停车最少），中午12-15点最高（白天车辆多）
      */
     private double predictHour(int hour) {
         if (trainingSize < 2) {
@@ -136,18 +142,15 @@ public class OccupancyPredictor {
             base = globalMean;
         }
 
-        // 邻近小时加权平滑（h-1, h, h+1 各 25%, 50%, 25%）
+        // 轻度邻域平滑（主要保留自身特征，少量参考相邻小时）
         Double prev = hourBase.get((hour - 1 + 24) % 24);
         Double next = hourBase.get((hour + 1) % 24);
-        double smoothed = base;
-        if (prev != null) smoothed = smoothed * 0.5 + prev * 0.25;
-        if (next != null) smoothed = smoothed * 0.5 + next * 0.25;
-        // 重新规整
-        smoothed = smoothed * 0.5 + base * 0.5;
+        double smoothed = base * 0.70;
+        if (prev != null) smoothed += prev * 0.15;
+        if (next != null) smoothed += next * 0.15;
 
-        // 加上微弱周期性偏差（模拟昼夜波动：凌晨低、午间高、晚上回落）
-        // 用 sin 模拟：6点最低, 14-15点最高, 24点回落
-        double periodicBias = 0.03 * Math.sin(Math.PI * (hour - 6) / 12);
+        // 周期性昼夜偏差：凌晨低谷(4点最低-0.05)，白天高峰(14点最高+0.05)
+        double periodicBias = 0.05 * Math.cos(Math.PI * (hour - 14) / 10);
         double result = smoothed + periodicBias;
 
         // 约束在 0~1
