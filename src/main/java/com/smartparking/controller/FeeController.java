@@ -95,10 +95,11 @@ public class FeeController {
      */
     @GetMapping("/export")
     public void exportExcel(HttpServletResponse response) throws IOException {
-        List<Fee> fees = feeRepository.findAll();
+        // 导出今日已结算记录
+        List<Fee> fees = feeService.getTodayPaidRecords();
 
         Workbook workbook = new XSSFWorkbook();
-        Sheet sheet = workbook.createSheet("费用记录");
+        Sheet sheet = workbook.createSheet("今日收费记录");
 
         // 表头
         String[] headers = {"ID", "车牌号", "入场时间", "出场时间", "停车时长(小时)",
@@ -163,7 +164,7 @@ public class FeeController {
         // 设置响应头
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setHeader("Content-Disposition",
-                "attachment; filename=" + URLEncoder.encode("费用记录.xlsx", StandardCharsets.UTF_8)
+                "attachment; filename=" + URLEncoder.encode("今日收费记录.xlsx", StandardCharsets.UTF_8)
                         .replaceAll("\\+", "%20"));
 
         workbook.write(response.getOutputStream());
