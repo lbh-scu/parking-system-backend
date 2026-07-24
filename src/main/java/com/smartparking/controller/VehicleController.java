@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/vehicles")
@@ -72,6 +73,15 @@ public class VehicleController {
             @RequestParam(required = false) String plateNumber) {
         List<Vehicle> history = vehicleService.getVehicleHistory(plateNumber);
         return ApiResponse.success(history);
+    }
+
+    /**
+     * 获取今日出入场统计数据
+     */
+    @GetMapping("/today-stats")
+    public ApiResponse<Map<String, Long>> getTodayStats() {
+        Map<String, Long> stats = vehicleService.getTodayStats();
+        return ApiResponse.success(stats);
     }
 
     /**

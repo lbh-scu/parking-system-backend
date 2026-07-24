@@ -14,9 +14,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
+import java.time.LocalTime;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class VehicleService {
@@ -151,6 +153,21 @@ public class VehicleService {
      */
     public List<Vehicle> getParkingVehicles() {
         return vehicleRepository.findByStatus("PARKING");
+    }
+
+    /**
+     * 获取今日出入场统计数据
+     */
+    public Map<String, Long> getTodayStats() {
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        LocalDateTime todayEnd = LocalDate.now().atTime(LocalTime.MAX);
+        long inCars = vehicleRepository.countByEntryTimeBetween(todayStart, todayEnd);
+        long outCars = vehicleRepository.countByExitTimeBetween(todayStart, todayEnd);
+        Map<String, Long> stats = new LinkedHashMap<>();
+        stats.put("inCars", inCars);
+        stats.put("outCars", outCars);
+        stats.put("todayCars", inCars + outCars);
+        return stats;
     }
 
     /**

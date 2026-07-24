@@ -2,6 +2,7 @@ package com.smartparking.repository;
 
 import com.smartparking.entity.Vehicle;
 import org.springframework.stereotype.Repository;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,4 +29,10 @@ public interface VehicleRepository extends BaseRepository<Vehicle, Long> {
 
     // 统计在场车辆数
     long countByStatus(String status);
+
+    // 查询今日入场的车辆数（entryTime >= 今天 00:00）
+    long countByEntryTimeBetween(LocalDateTime start, LocalDateTime end);
+
+    // 查询今日出场的车辆数（exitTime >= 今天 00:00）
+    long countByExitTimeBetween(LocalDateTime start, LocalDateTime end);
 }

@@ -138,73 +138,85 @@ public class StatisticsService {
     }
 
     /**
-     * 构建24小时的真实历史占用率数据（实时版）
+     * 构建24小时的历史占用率数据（基于多天历史数据聚合）
      *
-     * 用今天的实时数据计算每个小时的占用率：
-     * - 已过去的小时（0 ~ 当前小时）：按真实在场车辆数计算
-     * - 未来的小时：用当前实时占用率填充
+     * 改进点：不再只看今天，而是取过去30天的全部车辆记录，
+     * 按小时聚合统计每个小时的"平均在场车辆数"，
+     * 这样历史占用率曲线会真实反映多天的出入记录变化。
      *
-     * 这样历史占用率 = 今天各小时的真实值 ≈ 29%（与趋势图一致）
+     * 算法：
+     * 1. 取所有历史车辆记录（不限天数）
+     * 2. 对每个小时（0~23），统计在过去所有天的该小时区间内，
+     *    有多少车辆处于"在场"状态（entryTime <= 小时末 AND (exitTime == null OR exitTime >= 小时初)）
+     * 3. 每个小时的总在场次数 ÷ 统计天数 = 该小时平均在场车辆数
+     * 4. 平均在场车辆数 ÷ 总车位数 = 该小时的历史占用率
      */
     private List<Map<String, Object>> buildHourlyOccupancyHistory() {
         long totalSpots = parkingSpotRepository.count();
         if (totalSpots == 0) return List.of();
 
         List<Vehicle> allVehicles = vehicleRepository.findAll();
-        if (allVehicles.isEmpty()) return List.of();
+        if (allVehicles.isEmpty() || allVehicles.stream().noneMatch(v -> v.getEntryTime() != null)) {
+            return List.of();
+        }
 
-        List<Vehicle> recentVehicles = allVehicles.stream()
+        // 找出所有记录中的最早日期和最晚日期，确定统计时间跨度
+        LocalDateTime earliest = allVehicles.stream()
+                .filter(v -> v.getEntryTime() != null)
+                .map(Vehicle::getEntryTime)
+                .min(Comparator.naturalOrder())
+                .orElse(LocalDateTime.now().minusDays(30));
+        LocalDate startDate = earliest.toLocalDate();
+        LocalDate endDate = LocalDate.now();
+        long totalDays = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        if (totalDays <= 0) totalDays = 1;
+
+        // 只取有出入记录的车辆
+        List<Vehicle> vehiclesWithEntry = allVehicles.stream()
                 .filter(v -> v.getEntryTime() != null)
                 .collect(Collectors.toList());
 
-        if (recentVehicles.isEmpty()) return List.of();
+        // 统计每个小时在所有天中的总在场次数
+        long[] hourParkedCount = new long[24]; // 每个小时在所有天中累计的"在场车辆次数"
 
-        LocalDate today = LocalDate.now();
-        int currentHour = LocalDateTime.now().getHour();
+        // 对每一天，统计每个小时的在场车辆数
+        for (long dayOffset = 0; dayOffset < totalDays; dayOffset++) {
+            LocalDate date = startDate.plusDays(dayOffset);
+            for (int h = 0; h < 24; h++) {
+                LocalDateTime hourStart = date.atTime(h, 0, 0);
+                LocalDateTime hourEnd = date.atTime(h, 59, 59);
 
-        // 先算今天此刻的实时占用率（作为未来小时的填充值）
-        LocalDateTime now = LocalDateTime.now();
-        long currentParked = recentVehicles.stream()
-                .filter(v -> v.getEntryTime() != null
-                        && !v.getEntryTime().isAfter(now)
-                        && (v.getExitTime() == null || !v.getExitTime().isBefore(now)))
-                .count();
-        double currentOccupancy = Math.min(1.0, (double) currentParked / totalSpots);
-
-        // 算今天每个小时的实时占用率
-        List<Map<String, Object>> history = new ArrayList<>(24);
-        for (int h = 0; h < 24; h++) {
-            final int hour = h; // 用于lambda表达式
-            double rate;
-            if (hour <= currentHour) {
-                // 已过去的小时：算该时刻的在场车辆
-                LocalDateTime hourStart = today.atTime(hour, 0, 0);
-                LocalDateTime hourEnd = today.atTime(hour, 59, 59);
-                long parkedAtHour = recentVehicles.stream()
+                long parkedAtHour = vehiclesWithEntry.stream()
                         .filter(v -> v.getEntryTime() != null
                                 && !v.getEntryTime().isAfter(hourEnd)
                                 && (v.getExitTime() == null || !v.getExitTime().isBefore(hourStart)))
                         .count();
-                rate = Math.min(1.0, (double) parkedAtHour / totalSpots);
-            } else {
-                // 未来的小时：用当前占用率
-                rate = currentOccupancy;
+                hourParkedCount[h] += parkedAtHour;
             }
+        }
 
+        // 计算每个小时的平均占用率
+        List<Map<String, Object>> history = new ArrayList<>(24);
+        for (int h = 0; h < 24; h++) {
+            double avgParked = (double) hourParkedCount[h] / totalDays;
+            double rate = Math.min(1.0, avgParked / totalSpots);
             rate = Math.max(0.01, Math.min(0.99, rate));
             rate = BigDecimal.valueOf(rate).setScale(3, RoundingMode.HALF_UP).doubleValue();
 
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("hour", hour);
+            item.put("hour", h);
             item.put("rate", rate);
             item.put("activeCount", (int) Math.round(rate * totalSpots));
             history.add(item);
         }
+
         return history;
     }
 
     /**
      * 对缺失历史数据的小时进行插值（相邻小时均值）
+     * 注：此方法在改进版中不再被 buildHourlyOccupancyHistory 调用，
+     * 但保留以防其他场景需要。
      */
     private double interpolateMissingHour(int hour, double[] hourOccupancySum, int[] hourCount) {
         double sum = 0;
